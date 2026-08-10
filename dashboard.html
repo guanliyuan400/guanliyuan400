@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Milkplus 集团经营数据看板</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif; background: #f5f7fa; color: #333; }
+        
+        .header { background: linear-gradient(135deg, #1e3c72, #2a5298); color: white; padding: 20px 30px; }
+        .header h1 { font-size: 24px; font-weight: 600; }
+        .header p { font-size: 13px; opacity: 0.8; margin-top: 4px; }
+        
+        .container { max-width: 1600px; margin: 0 auto; padding: 20px; }
+        
+        .filters { background: white; border-radius: 12px; padding: 16px 24px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); display: flex; gap: 20px; align-items: center; flex-wrap: wrap; }
+        .filter-group { display: flex; align-items: center; gap: 8px; }
+        .filter-group label { font-size: 13px; font-weight: 500; color: #666; white-space: nowrap; }
+        .filter-group select { padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; min-width: 140px; cursor: pointer; background: #fafafa; }
+        .filter-group select:focus { outline: none; border-color: #2a5298; background: white; }
+        .filter-group select[multiple] { min-height: 100px; }
+        
+        .kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 20px; }
+        .kpi-card { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; }
+        .kpi-card:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0,0,0,0.1); }
+        .kpi-card .label { font-size: 13px; color: #888; margin-bottom: 8px; }
+        .kpi-card .value { font-size: 28px; font-weight: 700; color: #1e3c72; }
+        .kpi-card .change { font-size: 12px; margin-top: 4px; }
+        .kpi-card .change.up { color: #22c55e; }
+        .kpi-card .change.down { color: #ef4444; }
+        
+        .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+        .chart-card { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+        .chart-card.full { grid-column: 1 / -1; }
+        .chart-card h3 { font-size: 15px; font-weight: 600; margin-bottom: 12px; color: #444; }
+        .chart-card .chart { height: 350px; }
+        
+        .detail-panel { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); margin-bottom: 20px; display: none; }
+        .detail-panel.active { display: block; }
+        .detail-panel h3 { font-size: 16px; font-weight: 600; margin-bottom: 16px; color: #1e3c72; border-bottom: 2px solid #2a5298; padding-bottom: 8px; }
+        .detail-panel .close-btn { float: right; background: none; border: none; font-size: 20px; cursor: pointer; color: #999; }
+        .detail-panel .close-btn:hover { color: #333; }
+        
+        .data-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 12px; }
+        .data-table th { background: #f8fafc; padding: 10px 12px; text-align: left; font-weight: 600; color: #555; border-bottom: 2px solid #e2e8f0; position: sticky; top: 0; }
+        .data-table td { padding: 10px 12px; border-bottom: 1px solid #f1f5f9; }
+        .data-table tr:hover { background: #f8fafc; }
+        .data-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+        
+        .table-wrapper { max-height: 400px; overflow-y: auto; border-radius: 8px; border: 1px solid #e2e8f0; }
+        
+        @media (max-width: 1200px) {
+            .charts-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Milkplus 集团经营数据看板</h1>
+        <p>营业统计周期：2026年8月1日 - 8月7日 | 共11家门店</p>
+    </div>
+    
+    <div class="container">
+        <!-- Filters -->
+        <div class="filters">
+            <div class="filter-group">
+                <label>月份：</label>
+                <select id="monthFilter">
+                    <option value="all">全部月份</option>
+                    <option value="2026-08" selected>2026年8月</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>门店：</label>
+                <select id="storeFilter">
+                    <option value="all">全部门店</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>业务类型：</label>
+                <select id="channelFilter">
+                    <option value="all">全部渠道</option>
+                    <option value="店内销售">店内销售</option>
+                    <option value="美团外卖">美团外卖</option>
+                    <option value="淘宝闪购">淘宝闪购</option>
+                    <option value="京东秒送">京东秒送</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>分组方式：</label>
+                <select id="groupFilter">
+                    <option value="date">按日期</option>
+                    <option value="store">按门店</option>
+                </select>
+            </div>
+        </div>
+        
+        <!-- KPI Cards -->
+        <div class="kpi-row">
+            <div class="kpi-card" onclick="scrollToDetail()">
+                <div class="label">总营业额（元）</div>
+                <div class="value" id="kpiRevenue">-</div>
+                <div class="change" id="kpiRevenueChange">-</div>
+            </div>
+            <div class="kpi-card" onclick="scrollToDetail()">
+                <div class="label">总营业收入（元）</div>
+                <div class="value" id="kpiIncome">-</div>
+                <div class="change" id="kpiIncomeChange">-</div>
+            </div>
+            <div class="kpi-card" onclick="scrollToDetail()">
+                <div class="label">总订单量</div>
+                <div class="value" id="kpiOrders">-</div>
+                <div class="change" id="kpiOrdersChange">-</div>
+            </div>
+            <div class="kpi-card" onclick="scrollToDetail()">
+                <div class="label">平均到手率</div>
+                <div class="value" id="kpiRate">-</div>
+                <div class="change" id="kpiRateChange">-</div>
+            </div>
+        </div>
+        
+        <!-- Charts -->
+        <div class="charts-grid">
+            <div class="chart-card">
+                <h3>收入趋势（点击数据点查看详情）</h3>
+                <div class="chart" id="chartRevenue"></div>
+            </div>
+            <div class="chart-card">
+                <h3>营业收入与优惠金额对比（点击数据点查看详情）</h3>
+                <div class="chart" id="chartProfit"></div>
+            </div>
+            <div class="chart-card full">
+                <h3>订单量趋势（点击数据点查看详情）</h3>
+                <div class="chart" id="chartOrders"></div>
+            </div>
+        </div>
+        
+        <!-- Detail Panel -->
+        <div class="detail-panel" id="detailPanel">
+            <button class="close-btn" onclick="closeDetail()">&times;</button>
+            <h3 id="detailTitle">数据明细</h3>
+            <div id="detailContent"></div>
+        </div>
+        
+        <!-- Data Table -->
+        <div class="chart-card">
+            <h3>数据汇总表</h3>
+            <div class="table-wrapper">
+                <table class="data-table" id="dataTable">
+                    <thead>
+                        <tr>
+                            <th>日期</th>
+                            <th>门店</th>
+                            <th class="num">营业额</th>
+                            <th class="num">营业收入</th>
+                            <th class="num">优惠金额</th>
+                            <th class="num">订单量</th>
+                            <th class="num">用餐人数</th>
+                            <th class="num">到手率</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    const RAW_DATA = [{"store": "milkplus（东方宝泰店）", "date": "2026-08-07", "revenue": 12699.9, "discount": 6809.93, "income": 5889.97, "orders": 364, "diners": 52, "channels": {"店内销售": {"revenue": 1279.0, "income": 948.6, "discount": 330.4, "orders": 52}, "美团外卖": {"revenue": 2739.0, "income": 1415.18, "discount": 1323.82, "orders": 53}, "淘宝闪购": {"revenue": 6974.9, "income": 2612.44, "discount": 4362.46, "orders": 200}, "京东秒送": {"revenue": 1707.0, "income": 913.75, "discount": 793.25, "orders": 59}}}, {"store": "milkplus（东方宝泰店）", "date": "2026-08-06", "revenue": 5829.02, "discount": 3105.87, "income": 2723.15, "orders": 183, "diners": 44, "channels": {"店内销售": {"revenue": 1100.0, "income": 874.3, "discount": 225.7, "orders": 44}, "美团外卖": {"revenue": 1104.0, "income": 540.75, "discount": 563.25, "orders": 25}, "淘宝闪购": {"revenue": 3091.02, "income": 1038.65, "discount": 2052.37, "orders": 95}, "京东秒送": {"revenue": 534.0, "income": 269.45, "discount": 264.55, "orders": 19}}}, {"store": "milkplus（东方宝泰店）", "date": "2026-08-05", "revenue": 4876.28, "discount": 2459.67, "income": 2416.61, "orders": 157, "diners": 49, "channels": {"店内销售": {"revenue": 1217.0, "income": 990.0, "discount": 227.0, "orders": 49}, "美团外卖": {"revenue": 455.0, "income": 225.36, "discount": 229.64, "orders": 11}, "淘宝闪购": {"revenue": 2867.28, "income": 1025.59, "discount": 1841.69, "orders": 85}, "京东秒送": {"revenue": 337.0, "income": 175.66, "discount": 161.34, "orders": 12}}}, {"store": "milkplus（东方宝泰店）", "date": "2026-08-04", "revenue": 6314.9, "discount": 3165.69, "income": 3149.21, "orders": 175, "diners": 34, "channels": {"店内销售": {"revenue": 1344.0, "income": 1074.3, "discount": 269.7, "orders": 34}, "美团外卖": {"revenue": 937.0, "income": 461.04, "discount": 475.96, "orders": 22}, "淘宝闪购": {"revenue": 3587.9, "income": 1387.86, "discount": 2200.04, "orders": 103}, "京东秒送": {"revenue": 446.0, "income": 226.01, "discount": 219.99, "orders": 16}}}, {"store": "milkplus（东方宝泰店）", "date": "2026-08-03", "revenue": 6340.22, "discount": 3260.62, "income": 3079.6, "orders": 188, "diners": 50, "channels": {"店内销售": {"revenue": 1392.0, "income": 1102.7, "discount": 289.3, "orders": 50}, "美团外卖": {"revenue": 1092.0, "income": 561.0, "discount": 531.0, "orders": 19}, "淘宝闪购": {"revenue": 3525.22, "income": 1235.62, "discount": 2289.6, "orders": 108}, "京东秒送": {"revenue": 331.0, "income": 180.28, "discount": 150.72, "orders": 11}}}, {"store": "milkplus（东方宝泰店）", "date": "2026-08-02", "revenue": 7881.06, "discount": 3996.78, "income": 3884.28, "orders": 237, "diners": 72, "channels": {"店内销售": {"revenue": 2071.0, "income": 1656.0, "discount": 415.0, "orders": 72}, "美团外卖": {"revenue": 1167.0, "income": 500.92, "discount": 666.08, "orders": 28}, "淘宝闪购": {"revenue": 4217.06, "income": 1511.71, "discount": 2705.35, "orders": 122}, "京东秒送": {"revenue": 426.0, "income": 215.65, "discount": 210.35, "orders": 15}}}, {"store": "milkplus（东方宝泰店）", "date": "2026-08-01", "revenue": 9617.48, "discount": 4558.41, "income": 5059.07, "orders": 293, "diners": 113, "channels": {"店内销售": {"revenue": 3091.0, "income": 2396.6, "discount": 694.4, "orders": 113}, "美团外卖": {"revenue": 1739.0, "income": 879.53, "discount": 859.47, "orders": 34}, "淘宝闪购": {"revenue": 4399.48, "income": 1576.62, "discount": 2822.86, "orders": 133}, "京东秒送": {"revenue": 388.0, "income": 206.32, "discount": 181.68, "orders": 13}}}, {"store": "milkplus（体育西路店）", "date": "2026-08-07", "revenue": 24147.0, "discount": 12855.01, "income": 11291.99, "orders": 624, "diners": 22, "channels": {"店内销售": {"revenue": 674.0, "income": 443.42, "discount": 230.58, "orders": 22}, "美团外卖": {"revenue": 11735.0, "income": 6135.16, "discount": 5599.84, "orders": 248}, "淘宝闪购": {"revenue": 10607.0, "income": 4113.65, "discount": 6493.35, "orders": 315}, "京东秒送": {"revenue": 1131.0, "income": 599.76, "discount": 531.24, "orders": 39}}}, {"store": "milkplus（体育西路店）", "date": "2026-08-06", "revenue": 13145.0, "discount": 7293.64, "income": 5851.36, "orders": 361, "diners": 25, "channels": {"店内销售": {"revenue": 751.0, "income": 562.0, "discount": 189.0, "orders": 26}, "美团外卖": {"revenue": 5094.0, "income": 2392.67, "discount": 2701.33, "orders": 124}, "淘宝闪购": {"revenue": 6770.0, "income": 2592.11, "discount": 4177.89, "orders": 194}, "京东秒送": {"revenue": 530.0, "income": 304.58, "discount": 225.42, "orders": 17}}}, {"store": "milkplus（体育西路店）", "date": "2026-08-05", "revenue": 13018.0, "discount": 7236.7, "income": 5781.3, "orders": 364, "diners": 42, "channels": {"店内销售": {"revenue": 1143.0, "income": 760.7, "discount": 382.3, "orders": 42}, "美团外卖": {"revenue": 5424.0, "income": 2541.4, "discount": 2882.6, "orders": 133}, "淘宝闪购": {"revenue": 6115.0, "income": 2302.6, "discount": 3812.4, "orders": 177}, "京东秒送": {"revenue": 336.0, "income": 176.6, "discount": 159.4, "orders": 12}}}, {"store": "milkplus（体育西路店）", "date": "2026-08-04", "revenue": 13161.0, "discount": 7582.49, "income": 5578.51, "orders": 361, "diners": 24, "channels": {"店内销售": {"revenue": 588.0, "income": 386.1, "discount": 201.9, "orders": 24}, "美团外卖": {"revenue": 5903.0, "income": 2651.67, "discount": 3251.33, "orders": 139}, "淘宝闪购": {"revenue": 6115.0, "income": 2238.23, "discount": 3876.77, "orders": 178}, "京东秒送": {"revenue": 555.0, "income": 302.51, "discount": 252.49, "orders": 20}}}, {"store": "milkplus（体育西路店）", "date": "2026-08-03", "revenue": 13447.0, "discount": 7358.76, "income": 6088.24, "orders": 361, "diners": 38, "channels": {"店内销售": {"revenue": 1766.0, "income": 1341.6, "discount": 424.4, "orders": 38}, "美团外卖": {"revenue": 5145.0, "income": 2265.26, "discount": 2879.74, "orders": 129}, "淘宝闪购": {"revenue": 6126.0, "income": 2259.88, "discount": 3866.12, "orders": 181}, "京东秒送": {"revenue": 410.0, "income": 221.5, "discount": 188.5, "orders": 13}}}, {"store": "milkplus（体育西路店）", "date": "2026-08-02", "revenue": 15857.0, "discount": 8839.06, "income": 7017.94, "orders": 422, "diners": 43, "channels": {"店内销售": {"revenue": 1160.0, "income": 865.5, "discount": 294.5, "orders": 43}, "美团外卖": {"revenue": 6604.0, "income": 3011.22, "discount": 3592.78, "orders": 154}, "淘宝闪购": {"revenue": 7928.0, "income": 3049.75, "discount": 4878.25, "orders": 219}, "京东秒送": {"revenue": 165.0, "income": 91.47, "discount": 73.53, "orders": 6}}}, {"store": "milkplus（体育西路店）", "date": "2026-08-01", "revenue": 17191.0, "discount": 9805.12, "income": 7385.88, "orders": 463, "diners": 36, "channels": {"店内销售": {"revenue": 1017.0, "income": 761.1, "discount": 255.9, "orders": 36}, "美团外卖": {"revenue": 7790.0, "income": 3409.05, "discount": 4380.95, "orders": 191}, "淘宝闪购": {"revenue": 8086.0, "income": 3042.17, "discount": 5043.83, "orders": 226}, "京东秒送": {"revenue": 298.0, "income": 173.56, "discount": 124.44, "orders": 10}}}, {"store": "milkplus（保利鱼珠港店）", "date": "2026-08-07", "revenue": 19166.0, "discount": 10252.26, "income": 8913.74, "orders": 548, "diners": 58, "channels": {"店内销售": {"revenue": 1544.0, "income": 1023.7, "discount": 520.3, "orders": 58}, "美团外卖": {"revenue": 7497.0, "income": 3591.69, "discount": 3905.31, "orders": 195}, "淘宝闪购": {"revenue": 9548.0, "income": 3955.86, "discount": 5592.14, "orders": 277}, "京东秒送": {"revenue": 577.0, "income": 342.49, "discount": 234.51, "orders": 18}}}, {"store": "milkplus（保利鱼珠港店）", "date": "2026-08-06", "revenue": 11962.0, "discount": 5914.37, "income": 6047.63, "orders": 307, "diners": 51, "channels": {"店内销售": {"revenue": 2704.0, "income": 1892.2, "discount": 811.8, "orders": 51}, "美团外卖": {"revenue": 3325.0, "income": 1630.59, "discount": 1694.41, "orders": 80}, "淘宝闪购": {"revenue": 5469.0, "income": 2263.41, "discount": 3205.59, "orders": 160}, "京东秒送": {"revenue": 464.0, "income": 261.43, "discount": 202.57, "orders": 16}}}, {"store": "milkplus（保利鱼珠港店）", "date": "2026-08-05", "revenue": 11819.0, "discount": 6250.73, "income": 5568.27, "orders": 330, "diners": 39, "channels": {"店内销售": {"revenue": 1140.0, "income": 835.5, "discount": 304.5, "orders": 39}, "美团外卖": {"revenue": 4842.0, "income": 2364.57, "discount": 2477.43, "orders": 116}, "淘宝闪购": {"revenue": 5309.0, "income": 2071.7, "discount": 3237.3, "orders": 157}, "京东秒送": {"revenue": 528.0, "income": 296.5, "discount": 231.5, "orders": 18}}}, {"store": "milkplus（保利鱼珠港店）", "date": "2026-08-04", "revenue": 11875.0, "discount": 6347.16, "income": 5527.84, "orders": 324, "diners": 38, "channels": {"店内销售": {"revenue": 1250.0, "income": 814.9, "discount": 435.1, "orders": 38}, "美团外卖": {"revenue": 3161.0, "income": 1450.23, "discount": 1710.77, "orders": 86}, "淘宝闪购": {"revenue": 6927.0, "income": 2967.3, "discount": 3959.7, "orders": 181}, "京东秒送": {"revenue": 537.0, "income": 295.41, "discount": 241.59, "orders": 19}}}, {"store": "milkplus（保利鱼珠港店）", "date": "2026-08-03", "revenue": 11159.0, "discount": 6185.74, "income": 4973.26, "orders": 335, "diners": 50, "channels": {"店内销售": {"revenue": 1384.0, "income": 895.3, "discount": 488.7, "orders": 50}, "美团外卖": {"revenue": 3244.0, "income": 1510.36, "discount": 1733.64, "orders": 90}, "淘宝闪购": {"revenue": 6073.0, "income": 2293.68, "discount": 3779.32, "orders": 181}, "京东秒送": {"revenue": 458.0, "income": 273.92, "discount": 184.08, "orders": 14}}}, {"store": "milkplus（保利鱼珠港店）", "date": "2026-08-02", "revenue": 15060.0, "discount": 8206.61, "income": 6853.39, "orders": 416, "diners": 33, "channels": {"店内销售": {"revenue": 894.0, "income": 551.6, "discount": 342.4, "orders": 33}, "美团外卖": {"revenue": 5179.0, "income": 2500.41, "discount": 2678.59, "orders": 133}, "淘宝闪购": {"revenue": 7916.0, "income": 3202.85, "discount": 4713.15, "orders": 213}, "京东秒送": {"revenue": 1071.0, "income": 598.53, "discount": 472.47, "orders": 37}}}, {"store": "milkplus（保利鱼珠港店）", "date": "2026-08-01", "revenue": 13761.0, "discount": 7419.23, "income": 6341.77, "orders": 379, "diners": 43, "channels": {"店内销售": {"revenue": 1379.0, "income": 1029.2, "discount": 349.8, "orders": 43}, "美团外卖": {"revenue": 3461.0, "income": 1592.53, "discount": 1868.47, "orders": 94}, "淘宝闪购": {"revenue": 8441.0, "income": 3455.1, "discount": 4985.9, "orders": 225}, "京东秒送": {"revenue": 480.0, "income": 264.94, "discount": 215.06, "orders": 17}}}, {"store": "milkplus（大源里广场店）", "date": "2026-08-07", "revenue": 6723.0, "discount": 3892.19, "income": 2830.81, "orders": 209, "diners": 19, "channels": {"店内销售": {"revenue": 481.0, "income": 300.3, "discount": 180.7, "orders": 19}, "美团外卖": {"revenue": 2621.0, "income": 1151.46, "discount": 1469.54, "orders": 75}, "淘宝闪购": {"revenue": 3262.0, "income": 1195.37, "discount": 2066.63, "orders": 101}, "京东秒送": {"revenue": 359.0, "income": 183.68, "discount": 175.32, "orders": 14}}}, {"store": "milkplus（大源里广场店）", "date": "2026-08-06", "revenue": 2564.0, "discount": 1528.93, "income": 1035.07, "orders": 80, "diners": 6, "channels": {"店内销售": {"revenue": 198.0, "income": 132.7, "discount": 65.3, "orders": 6}, "美团外卖": {"revenue": 896.0, "income": 357.19, "discount": 538.81, "orders": 27}, "淘宝闪购": {"revenue": 1320.0, "income": 471.98, "discount": 848.02, "orders": 41}, "京东秒送": {"revenue": 150.0, "income": 73.2, "discount": 76.8, "orders": 6}}}, {"store": "milkplus（大源里广场店）", "date": "2026-08-05", "revenue": 2938.0, "discount": 1571.42, "income": 1366.58, "orders": 84, "diners": 15, "channels": {"店内销售": {"revenue": 359.0, "income": 209.8, "discount": 149.2, "orders": 15}, "美团外卖": {"revenue": 1215.0, "income": 599.68, "discount": 615.32, "orders": 30}, "淘宝闪购": {"revenue": 1195.0, "income": 467.75, "discount": 727.25, "orders": 33}, "京东秒送": {"revenue": 169.0, "income": 89.35, "discount": 79.65, "orders": 6}}}, {"store": "milkplus（大源里广场店）", "date": "2026-08-04", "revenue": 3714.0, "discount": 1921.3, "income": 1792.7, "orders": 105, "diners": 18, "channels": {"店内销售": {"revenue": 434.0, "income": 343.4, "discount": 90.6, "orders": 18}, "美团外卖": {"revenue": 1279.0, "income": 598.88, "discount": 680.12, "orders": 30}, "淘宝闪购": {"revenue": 1743.0, "income": 708.19, "discount": 1034.81, "orders": 48}, "京东秒送": {"revenue": 258.0, "income": 142.23, "discount": 115.77, "orders": 9}}}, {"store": "milkplus（大源里广场店）", "date": "2026-08-03", "revenue": 3386.0, "discount": 1907.77, "income": 1478.23, "orders": 100, "diners": 13, "channels": {"店内销售": {"revenue": 365.0, "income": 275.4, "discount": 89.6, "orders": 13}, "美团外卖": {"revenue": 1028.0, "income": 457.38, "discount": 570.62, "orders": 25}, "淘宝闪购": {"revenue": 1890.0, "income": 692.71, "discount": 1197.29, "orders": 58}, "京东秒送": {"revenue": 103.0, "income": 52.74, "discount": 50.26, "orders": 4}}}, {"store": "milkplus（大源里广场店）", "date": "2026-08-02", "revenue": 4519.0, "discount": 2608.97, "income": 1910.03, "orders": 134, "diners": 13, "channels": {"店内销售": {"revenue": 340.0, "income": 240.8, "discount": 99.2, "orders": 13}, "美团外卖": {"revenue": 2222.0, "income": 903.58, "discount": 1318.42, "orders": 61}, "淘宝闪购": {"revenue": 1715.0, "income": 637.67, "discount": 1077.33, "orders": 51}, "京东秒送": {"revenue": 242.0, "income": 127.98, "discount": 114.02, "orders": 9}}}, {"store": "milkplus（大源里广场店）", "date": "2026-08-01", "revenue": 5426.0, "discount": 3152.69, "income": 2273.31, "orders": 163, "diners": 12, "channels": {"店内销售": {"revenue": 264.0, "income": 155.2, "discount": 108.8, "orders": 12}, "美团外卖": {"revenue": 1959.0, "income": 795.32, "discount": 1163.68, "orders": 53}, "淘宝闪购": {"revenue": 2523.0, "income": 960.06, "discount": 1562.94, "orders": 73}, "京东秒送": {"revenue": 680.0, "income": 362.73, "discount": 317.27, "orders": 25}}}, {"store": "milkplus（太和金铂天地店）", "date": "2026-08-07", "revenue": 12705.0, "discount": 6178.08, "income": 6526.92, "orders": 347, "diners": 96, "channels": {"店内销售": {"revenue": 2714.0, "income": 1925.2, "discount": 788.8, "orders": 96}, "美团外卖": {"revenue": 4907.0, "income": 2498.09, "discount": 2408.91, "orders": 112}, "淘宝闪购": {"revenue": 5084.0, "income": 2103.63, "discount": 2980.37, "orders": 139}, "京东秒送": {"revenue": 0.0, "income": 0.0, "discount": 0.0, "orders": 0}}}, {"store": "milkplus（太和金铂天地店）", "date": "2026-08-06", "revenue": 6621.0, "discount": 2569.23, "income": 4051.77, "orders": 174, "diners": 73, "channels": {"店内销售": {"revenue": 3035.0, "income": 2465.0, "discount": 570.0, "orders": 73}, "美团外卖": {"revenue": 1923.0, "income": 929.16, "discount": 993.84, "orders": 49}, "淘宝闪购": {"revenue": 1663.0, "income": 657.61, "discount": 1005.39, "orders": 52}, "京东秒送": {"revenue": 0.0, "income": 0.0, "discount": 0.0, "orders": 0}}}, {"store": "milkplus（太和金铂天地店）", "date": "2026-08-05", "revenue": 6915.0, "discount": 2983.18, "income": 3931.82, "orders": 196, "diners": 84, "channels": {"店内销售": {"revenue": 2795.0, "income": 2101.8, "discount": 693.2, "orders": 84}, "美团外卖": {"revenue": 2313.0, "income": 1074.9, "discount": 1238.1, "orders": 61}, "淘宝闪购": {"revenue": 1807.0, "income": 755.12, "discount": 1051.88, "orders": 51}, "京东秒送": {"revenue": 0.0, "income": 0.0, "discount": 0.0, "orders": 0}}}, {"store": "milkplus（太和金铂天地店）", "date": "2026-08-04", "revenue": 6540.0, "discount": 2571.52, "income": 3968.48, "orders": 157, "diners": 46, "channels": {"店内销售": {"revenue": 2640.0, "income": 2316.7, "discount": 323.3, "orders": 46}, "美团外卖": {"revenue": 1653.0, "income": 732.99, "discount": 920.01, "orders": 46}, "淘宝闪购": {"revenue": 2247.0, "income": 918.79, "discount": 1328.21, "orders": 65}, "京东秒送": {"revenue": 0.0, "income": 0.0, "discount": 0.0, "orders": 0}}}, {"store": "milkplus（太和金铂天地店）", "date": "2026-08-03", "revenue": 6303.0, "discount": 2572.94, "income": 3730.06, "orders": 178, "diners": 79, "channels": {"店内销售": {"revenue": 2768.0, "income": 2159.9, "discount": 608.1, "orders": 79}, "美团外卖": {"revenue": 1423.0, "income": 646.92, "discount": 776.08, "orders": 40}, "淘宝闪购": {"revenue": 2112.0, "income": 923.24, "discount": 1188.76, "orders": 59}, "京东秒送": {"revenue": 0.0, "income": 0.0, "discount": 0.0, "orders": 0}}}, {"store": "milkplus（太和金铂天地店）", "date": "2026-08-02", "revenue": 9667.0, "discount": 3434.03, "income": 6232.97, "orders": 252, "diners": 122, "channels": {"店内销售": {"revenue": 4743.0, "income": 4007.3, "discount": 735.7, "orders": 122}, "美团外卖": {"revenue": 1924.0, "income": 958.29, "discount": 965.71, "orders": 45}, "淘宝闪购": {"revenue": 3000.0, "income": 1267.38, "discount": 1732.62, "orders": 85}, "京东秒送": {"revenue": 0.0, "income": 0.0, "discount": 0.0, "orders": 0}}}, {"store": "milkplus（太和金铂天地店）", "date": "2026-08-01", "revenue": 10076.0, "discount": 4040.62, "income": 6035.38, "orders": 273, "diners": 114, "channels": {"店内销售": {"revenue": 4496.0, "income": 3661.7, "discount": 834.3, "orders": 114}, "美团外卖": {"revenue": 2208.0, "income": 994.32, "discount": 1213.68, "orders": 64}, "淘宝闪购": {"revenue": 3372.0, "income": 1379.36, "discount": 1992.64, "orders": 95}, "京东秒送": {"revenue": 0.0, "income": 0.0, "discount": 0.0, "orders": 0}}}, {"store": "milkplus（岗顶店）", "date": "2026-08-07", "revenue": 11181.0, "discount": 5571.65, "income": 5609.35, "orders": 291, "diners": 25, "channels": {"店内销售": {"revenue": 1793.0, "income": 1593.5, "discount": 199.5, "orders": 25}, "美团外卖": {"revenue": 4665.0, "income": 2139.97, "discount": 2525.03, "orders": 123}, "淘宝闪购": {"revenue": 3910.0, "income": 1429.42, "discount": 2480.58, "orders": 114}, "京东秒送": {"revenue": 813.0, "income": 446.46, "discount": 366.54, "orders": 29}}}, {"store": "milkplus（岗顶店）", "date": "2026-08-06", "revenue": 6378.0, "discount": 3613.16, "income": 2764.84, "orders": 180, "diners": 16, "channels": {"店内销售": {"revenue": 385.0, "income": 229.0, "discount": 156.0, "orders": 16}, "美团外卖": {"revenue": 2928.0, "income": 1375.88, "discount": 1552.12, "orders": 71}, "淘宝闪购": {"revenue": 2701.0, "income": 961.1, "discount": 1739.9, "orders": 80}, "京东秒送": {"revenue": 364.0, "income": 198.86, "discount": 165.14, "orders": 13}}}, {"store": "milkplus（岗顶店）", "date": "2026-08-05", "revenue": 6323.0, "discount": 3810.74, "income": 2512.26, "orders": 192, "diners": 15, "channels": {"店内销售": {"revenue": 366.0, "income": 277.4, "discount": 88.6, "orders": 15}, "美团外卖": {"revenue": 2692.0, "income": 1253.7, "discount": 1438.3, "orders": 69}, "淘宝闪购": {"revenue": 2958.0, "income": 814.21, "discount": 2143.79, "orders": 97}, "京东秒送": {"revenue": 307.0, "income": 166.95, "discount": 140.05, "orders": 11}}}, {"store": "milkplus（岗顶店）", "date": "2026-08-04", "revenue": 4854.0, "discount": 2814.64, "income": 2039.36, "orders": 142, "diners": 9, "channels": {"店内销售": {"revenue": 276.0, "income": 196.6, "discount": 79.4, "orders": 9}, "美团外卖": {"revenue": 2473.0, "income": 1025.13, "discount": 1447.87, "orders": 70}, "淘宝闪购": {"revenue": 1852.0, "income": 677.58, "discount": 1174.42, "orders": 54}, "京东秒送": {"revenue": 253.0, "income": 140.05, "discount": 112.95, "orders": 9}}}, {"store": "milkplus（岗顶店）", "date": "2026-08-03", "revenue": 5125.0, "discount": 2937.51, "income": 2187.49, "orders": 156, "diners": 17, "channels": {"店内销售": {"revenue": 408.0, "income": 271.7, "discount": 136.3, "orders": 17}, "美团外卖": {"revenue": 2324.0, "income": 1022.23, "discount": 1301.77, "orders": 61}, "淘宝闪购": {"revenue": 2000.0, "income": 676.21, "discount": 1323.79, "orders": 64}, "京东秒送": {"revenue": 393.0, "income": 217.35, "discount": 175.65, "orders": 14}}}, {"store": "milkplus（岗顶店）", "date": "2026-08-02", "revenue": 5781.0, "discount": 3254.32, "income": 2526.68, "orders": 176, "diners": 28, "channels": {"店内销售": {"revenue": 655.0, "income": 432.7, "discount": 222.3, "orders": 28}, "美团外卖": {"revenue": 2736.0, "income": 1172.18, "discount": 1563.82, "orders": 72}, "淘宝闪购": {"revenue": 1855.0, "income": 626.86, "discount": 1228.14, "orders": 57}, "京东秒送": {"revenue": 535.0, "income": 294.94, "discount": 240.06, "orders": 19}}}, {"store": "milkplus（岗顶店）", "date": "2026-08-01", "revenue": 7000.0, "discount": 3778.27, "income": 3221.73, "orders": 210, "diners": 45, "channels": {"店内销售": {"revenue": 1058.0, "income": 754.9, "discount": 303.1, "orders": 45}, "美团外卖": {"revenue": 3525.0, "income": 1572.89, "discount": 1952.11, "orders": 91}, "淘宝闪购": {"revenue": 2221.0, "income": 786.37, "discount": 1434.63, "orders": 67}, "京东秒送": {"revenue": 196.0, "income": 107.57, "discount": 88.43, "orders": 7}}}, {"store": "milkplus（新塘大润发店）", "date": "2026-08-07", "revenue": 13339.0, "discount": 6842.87, "income": 6496.13, "orders": 382, "diners": 76, "channels": {"店内销售": {"revenue": 2388.0, "income": 1893.9, "discount": 494.1, "orders": 76}, "美团外卖": {"revenue": 0.0, "income": 0.0, "discount": 0.0, "orders": 0}, "淘宝闪购": {"revenue": 10151.0, "income": 4136.38, "discount": 6014.62, "orders": 280}, "京东秒送": {"revenue": 800.0, "income": 465.85, "discount": 334.15, "orders": 26}}}, {"store": "milkplus（新塘大润发店）", "date": "2026-08-06", "revenue": 6886.0, "discount": 3753.71, "income": 3132.29, "orders": 207, "diners": 34, "channels": {"店内销售": {"revenue": 910.0, "income": 679.0, "discount": 231.0, "orders": 34}, "美团外卖": {"revenue": 0.0, "income": 0.0, "discount": 0.0, "orders": 0}, "淘宝闪购": {"revenue": 5594.0, "income": 2244.25, "discount": 3349.75, "orders": 159}, "京东秒送": {"revenue": 382.0, "income": 209.04, "discount": 172.96, "orders": 14}}}, {"store": "milkplus（新塘大润发店）", "date": "2026-08-05", "revenue": 7985.0, "discount": 4134.75, "income": 3850.25, "orders": 232, "diners": 65, "channels": {"店内销售": {"revenue": 1731.0, "income": 1249.7, "discount": 481.3, "orders": 64}, "美团外卖": {"revenue": 0.0, "income": 0.0, "discount": 0.0, "orders": 0}, "淘宝闪购": {"revenue": 5899.0, "income": 2400.45, "discount": 3498.55, "orders": 156}, "京东秒送": {"revenue": 355.0, "income": 200.1, "discount": 154.9, "orders": 12}}}, {"store": "milkplus（新塘大润发店）", "date": "2026-08-04", "revenue": 7982.0, "discount": 4319.9, "income": 3662.1, "orders": 237, "diners": 43, "channels": {"店内销售": {"revenue": 1171.0, "income": 900.4, "discount": 270.6, "orders": 43}, "美团外卖": {"revenue": 0.0, "income": 0.0, "discount": 0.0, "orders": 0}, "淘宝闪购": {"revenue": 6558.0, "income": 2614.3, "discount": 3943.7, "orders": 186}, "京东秒送": {"revenue": 253.0, "income": 147.4, "discount": 105.6, "orders": 8}}}, {"store": "milkplus（新塘大润发店）", "date": "2026-08-03", "revenue": 7881.0, "discount": 4360.64, "income": 3520.36, "orders": 221, "diners": 33, "channels": {"店内销售": {"revenue": 798.0, "income": 609.3, "discount": 188.7, "orders": 33}, "美团外卖": {"revenue": 0.0, "income": 0.0, "discount": 0.0, "orders": 0}, "淘宝闪购": {"revenue": 6947.0, "income": 2838.56, "discount": 4108.44, "orders": 183}, "京东秒送": {"revenue": 136.0, "income": 72.5, "discount": 63.5, "orders": 5}}}, {"store": "milkplus（新塘大润发店）", "date": "2026-08-02", "revenue": 11028.0, "discount": 5876.69, "income": 5151.31, "orders": 309, "diners": 65, "channels": {"店内销售": {"revenue": 1847.0, "income": 1407.2, "discount": 439.8, "orders": 65}, "美团外卖": {"revenue": 0.0, "income": 0.0, "discount": 0.0, "orders": 0}, "淘宝闪购": {"revenue": 9181.0, "income": 3744.11, "discount": 5436.89, "orders": 244}, "京东秒送": {"revenue": 0.0, "income": 0.0, "discount": 0.0, "orders": 0}}}, {"store": "milkplus（新塘大润发店）", "date": "2026-08-01", "revenue": 10876.0, "discount": 5791.42, "income": 5084.58, "orders": 298, "diners": 65, "channels": {"店内销售": {"revenue": 1841.0, "income": 1411.8, "discount": 429.2, "orders": 65}, "美团外卖": {"revenue": 0.0, "income": 0.0, "discount": 0.0, "orders": 0}, "淘宝闪购": {"revenue": 9035.0, "income": 3672.78, "discount": 5362.22, "orders": 233}, "京东秒送": {"revenue": 0.0, "income": 0.0, "discount": 0.0, "orders": 0}}}, {"store": "milkplus（白云形象店）", "date": "2026-08-07", "revenue": 19701.0, "discount": 11373.92, "income": 8327.08, "orders": 501, "diners": 32, "channels": {"店内销售": {"revenue": 863.0, "income": 439.4, "discount": 423.6, "orders": 32}, "美团外卖": {"revenue": 8215.0, "income": 3983.09, "discount": 4231.91, "orders": 184}, "淘宝闪购": {"revenue": 10175.0, "income": 3642.49, "discount": 6532.51, "orders": 274}, "京东秒送": {"revenue": 448.0, "income": 262.1, "discount": 185.9, "orders": 11}}}, {"store": "milkplus（白云形象店）", "date": "2026-08-06", "revenue": 8481.0, "discount": 4835.46, "income": 3645.54, "orders": 233, "diners": 22, "channels": {"店内销售": {"revenue": 707.0, "income": 480.2, "discount": 226.8, "orders": 22}, "美团外卖": {"revenue": 3216.0, "income": 1442.48, "discount": 1773.52, "orders": 88}, "淘宝闪购": {"revenue": 4558.0, "income": 1722.86, "discount": 2835.14, "orders": 123}, "京东秒送": {"revenue": 0.0, "income": 0.0, "discount": 0.0, "orders": 0}}}, {"store": "milkplus（白云形象店）", "date": "2026-08-05", "revenue": 8268.0, "discount": 4659.36, "income": 3608.64, "orders": 231, "diners": 27, "channels": {"店内销售": {"revenue": 735.0, "income": 456.1, "discount": 278.9, "orders": 27}, "美团外卖": {"revenue": 3525.0, "income": 1659.15, "discount": 1865.85, "orders": 83}, "淘宝闪购": {"revenue": 3900.0, "income": 1432.69, "discount": 2467.31, "orders": 118}, "京东秒送": {"revenue": 108.0, "income": 60.7, "discount": 47.3, "orders": 3}}}, {"store": "milkplus（白云形象店）", "date": "2026-08-04", "revenue": 7322.0, "discount": 4123.54, "income": 3198.46, "orders": 188, "diners": 17, "channels": {"店内销售": {"revenue": 503.0, "income": 352.4, "discount": 150.6, "orders": 17}, "美团外卖": {"revenue": 3700.0, "income": 1639.25, "discount": 2060.75, "orders": 87}, "淘宝闪购": {"revenue": 3091.0, "income": 1190.21, "discount": 1900.79, "orders": 83}, "京东秒送": {"revenue": 28.0, "income": 16.6, "discount": 11.4, "orders": 1}}}, {"store": "milkplus（白云形象店）", "date": "2026-08-03", "revenue": 8650.0, "discount": 4835.35, "income": 3814.65, "orders": 207, "diners": 20, "channels": {"店内销售": {"revenue": 679.0, "income": 463.5, "discount": 215.5, "orders": 20}, "美团外卖": {"revenue": 4142.0, "income": 1910.91, "discount": 2231.09, "orders": 82}, "淘宝闪购": {"revenue": 3661.0, "income": 1342.14, "discount": 2318.86, "orders": 100}, "京东秒送": {"revenue": 168.0, "income": 98.1, "discount": 69.9, "orders": 5}}}, {"store": "milkplus（白云形象店）", "date": "2026-08-02", "revenue": 9315.0, "discount": 5608.64, "income": 3706.36, "orders": 253, "diners": 15, "channels": {"店内销售": {"revenue": 443.0, "income": 298.5, "discount": 144.5, "orders": 15}, "美团外卖": {"revenue": 3629.0, "income": 1545.91, "discount": 2083.09, "orders": 88}, "淘宝闪购": {"revenue": 5061.0, "income": 1753.03, "discount": 3307.97, "orders": 144}, "京东秒送": {"revenue": 182.0, "income": 108.92, "discount": 73.08, "orders": 6}}}, {"store": "milkplus（白云形象店）", "date": "2026-08-01", "revenue": 11286.0, "discount": 6836.11, "income": 4449.89, "orders": 303, "diners": 16, "channels": {"店内销售": {"revenue": 463.0, "income": 305.6, "discount": 157.4, "orders": 16}, "美团外卖": {"revenue": 3324.0, "income": 1458.18, "discount": 1865.82, "orders": 82}, "淘宝闪购": {"revenue": 7244.0, "income": 2531.99, "discount": 4712.01, "orders": 198}, "京东秒送": {"revenue": 255.0, "income": 154.12, "discount": 100.88, "orders": 7}}}, {"store": "milkplus（石井国际店）", "date": "2026-08-07", "revenue": 12034.0, "discount": 6638.95, "income": 5395.05, "orders": 335, "diners": 29, "channels": {"店内销售": {"revenue": 849.0, "income": 620.5, "discount": 228.5, "orders": 29}, "美团外卖": {"revenue": 4365.0, "income": 2107.96, "discount": 2257.04, "orders": 105}, "淘宝闪购": {"revenue": 5981.0, "income": 2198.06, "discount": 3782.94, "orders": 172}, "京东秒送": {"revenue": 839.0, "income": 468.53, "discount": 370.47, "orders": 29}}}, {"store": "milkplus（石井国际店）", "date": "2026-08-06", "revenue": 5203.0, "discount": 2918.15, "income": 2284.85, "orders": 163, "diners": 28, "channels": {"店内销售": {"revenue": 668.0, "income": 493.1, "discount": 174.9, "orders": 28}, "美团外卖": {"revenue": 1221.0, "income": 537.69, "discount": 683.31, "orders": 37}, "淘宝闪购": {"revenue": 3090.0, "income": 1131.06, "discount": 1958.94, "orders": 90}, "京东秒送": {"revenue": 224.0, "income": 123.0, "discount": 101.0, "orders": 8}}}, {"store": "milkplus（石井国际店）", "date": "2026-08-05", "revenue": 5986.0, "discount": 3300.73, "income": 2685.27, "orders": 176, "diners": 24, "channels": {"店内销售": {"revenue": 670.0, "income": 547.7, "discount": 122.3, "orders": 24}, "美团外卖": {"revenue": 1720.0, "income": 790.16, "discount": 929.84, "orders": 44}, "淘宝闪购": {"revenue": 3259.0, "income": 1132.4, "discount": 2126.6, "orders": 99}, "京东秒送": {"revenue": 337.0, "income": 215.01, "discount": 121.99, "orders": 9}}}, {"store": "milkplus（石井国际店）", "date": "2026-08-04", "revenue": 6134.0, "discount": 3412.48, "income": 2721.52, "orders": 172, "diners": 15, "channels": {"店内销售": {"revenue": 383.0, "income": 265.3, "discount": 117.7, "orders": 15}, "美团外卖": {"revenue": 1895.0, "income": 949.84, "discount": 945.16, "orders": 44}, "淘宝闪购": {"revenue": 3516.0, "income": 1320.25, "discount": 2195.75, "orders": 101}, "京东秒送": {"revenue": 340.0, "income": 186.13, "discount": 153.87, "orders": 12}}}, {"store": "milkplus（石井国际店）", "date": "2026-08-03", "revenue": 6185.0, "discount": 3449.87, "income": 2735.13, "orders": 178, "diners": 20, "channels": {"店内销售": {"revenue": 541.0, "income": 368.4, "discount": 172.6, "orders": 20}, "美团外卖": {"revenue": 1962.0, "income": 987.45, "discount": 974.55, "orders": 47}, "淘宝闪购": {"revenue": 3404.0, "income": 1227.02, "discount": 2176.98, "orders": 101}, "京东秒送": {"revenue": 278.0, "income": 152.26, "discount": 125.74, "orders": 10}}}, {"store": "milkplus（石井国际店）", "date": "2026-08-02", "revenue": 6997.0, "discount": 3789.99, "income": 3207.01, "orders": 209, "diners": 37, "channels": {"店内销售": {"revenue": 1021.0, "income": 772.5, "discount": 248.5, "orders": 37}, "美团外卖": {"revenue": 1504.0, "income": 715.5, "discount": 788.5, "orders": 38}, "淘宝闪购": {"revenue": 3976.0, "income": 1437.66, "discount": 2538.34, "orders": 117}, "京东秒送": {"revenue": 496.0, "income": 281.35, "discount": 214.65, "orders": 17}}}, {"store": "milkplus（石井国际店）", "date": "2026-08-01", "revenue": 8395.0, "discount": 4770.67, "income": 3624.33, "orders": 223, "diners": 23, "channels": {"店内销售": {"revenue": 720.0, "income": 449.6, "discount": 270.4, "orders": 23}, "美团外卖": {"revenue": 2419.0, "income": 1197.87, "discount": 1221.13, "orders": 51}, "淘宝闪购": {"revenue": 4841.0, "income": 1740.66, "discount": 3100.34, "orders": 135}, "京东秒送": {"revenue": 415.0, "income": 236.2, "discount": 178.8, "orders": 14}}}, {"store": "milkplus（花城汇店）", "date": "2026-08-07", "revenue": 16211.0, "discount": 7423.52, "income": 8787.48, "orders": 375, "diners": 61, "channels": {"店内销售": {"revenue": 1682.0, "income": 1217.6, "discount": 464.4, "orders": 61}, "美团外卖": {"revenue": 8458.0, "income": 4920.04, "discount": 3537.96, "orders": 137}, "淘宝闪购": {"revenue": 4869.0, "income": 1999.95, "discount": 2869.05, "orders": 134}, "京东秒送": {"revenue": 1202.0, "income": 649.89, "discount": 552.11, "orders": 43}}}, {"store": "milkplus（花城汇店）", "date": "2026-08-06", "revenue": 8640.0, "discount": 4184.76, "income": 4455.24, "orders": 250, "diners": 64, "channels": {"店内销售": {"revenue": 1751.0, "income": 1375.6, "discount": 375.4, "orders": 64}, "美团外卖": {"revenue": 2904.0, "income": 1409.5, "discount": 1494.5, "orders": 73}, "淘宝闪购": {"revenue": 3259.0, "income": 1288.31, "discount": 1970.69, "orders": 86}, "京东秒送": {"revenue": 726.0, "income": 381.83, "discount": 344.17, "orders": 27}}}, {"store": "milkplus（花城汇店）", "date": "2026-08-05", "revenue": 7648.0, "discount": 3727.46, "income": 3920.54, "orders": 216, "diners": 39, "channels": {"店内销售": {"revenue": 1105.0, "income": 937.1, "discount": 167.9, "orders": 39}, "美团外卖": {"revenue": 3421.0, "income": 1725.93, "discount": 1695.07, "orders": 79}, "淘宝闪购": {"revenue": 2586.0, "income": 977.3, "discount": 1608.7, "orders": 78}, "京东秒送": {"revenue": 536.0, "income": 280.21, "discount": 255.79, "orders": 20}}}, {"store": "milkplus（花城汇店）", "date": "2026-08-04", "revenue": 6859.0, "discount": 3344.1, "income": 3514.9, "orders": 202, "diners": 43, "channels": {"店内销售": {"revenue": 1143.0, "income": 948.4, "discount": 194.6, "orders": 43}, "美团外卖": {"revenue": 3092.0, "income": 1428.78, "discount": 1663.22, "orders": 80}, "淘宝闪购": {"revenue": 2172.0, "income": 899.94, "discount": 1272.06, "orders": 62}, "京东秒送": {"revenue": 452.0, "income": 237.78, "discount": 214.22, "orders": 17}}}, {"store": "milkplus（花城汇店）", "date": "2026-08-03", "revenue": 6853.0, "discount": 3361.64, "income": 3491.36, "orders": 190, "diners": 32, "channels": {"店内销售": {"revenue": 883.0, "income": 738.5, "discount": 144.5, "orders": 32}, "美团外卖": {"revenue": 2985.0, "income": 1470.31, "discount": 1514.69, "orders": 67}, "淘宝闪购": {"revenue": 2589.0, "income": 1075.34, "discount": 1513.66, "orders": 76}, "京东秒送": {"revenue": 396.0, "income": 207.21, "discount": 188.79, "orders": 15}}}, {"store": "milkplus（花城汇店）", "date": "2026-08-02", "revenue": 7473.0, "discount": 3392.98, "income": 4080.02, "orders": 221, "diners": 63, "channels": {"店内销售": {"revenue": 1744.0, "income": 1464.7, "discount": 279.3, "orders": 62}, "美团外卖": {"revenue": 2485.0, "income": 1141.69, "discount": 1343.31, "orders": 60}, "淘宝闪购": {"revenue": 2447.0, "income": 1035.14, "discount": 1411.86, "orders": 71}, "京东秒送": {"revenue": 797.0, "income": 438.49, "discount": 358.51, "orders": 28}}}, {"store": "milkplus（花城汇店）", "date": "2026-08-01", "revenue": 8388.0, "discount": 4194.32, "income": 4193.68, "orders": 254, "diners": 52, "channels": {"店内销售": {"revenue": 1479.0, "income": 1283.8, "discount": 195.2, "orders": 52}, "美团外卖": {"revenue": 2881.0, "income": 1225.72, "discount": 1655.28, "orders": 75}, "淘宝闪购": {"revenue": 3084.0, "income": 1165.95, "discount": 1918.05, "orders": 94}, "京东秒送": {"revenue": 944.0, "income": 518.21, "discount": 425.79, "orders": 33}}}, {"store": "milkplus（陈家祠店）", "date": "2026-08-07", "revenue": 16203.0, "discount": 9026.36, "income": 7176.64, "orders": 487, "diners": 112, "channels": {"店内销售": {"revenue": 3214.0, "income": 2378.8, "discount": 835.2, "orders": 112}, "美团外卖": {"revenue": 0.0, "income": 0.0, "discount": 0.0, "orders": 0}, "淘宝闪购": {"revenue": 12989.0, "income": 4797.84, "discount": 8191.16, "orders": 375}, "京东秒送": {"revenue": 0.0, "income": 0.0, "discount": 0.0, "orders": 0}}}, {"store": "milkplus（陈家祠店）", "date": "2026-08-06", "revenue": 10286.0, "discount": 6456.96, "income": 3829.04, "orders": 307, "diners": 69, "channels": {"店内销售": {"revenue": 2030.0, "income": 1130.9, "discount": 899.1, "orders": 69}, "美团外卖": {"revenue": 0.0, "income": 0.0, "discount": 0.0, "orders": 0}, "淘宝闪购": {"revenue": 8256.0, "income": 2698.14, "discount": 5557.86, "orders": 238}, "京东秒送": {"revenue": 0.0, "income": 0.0, "discount": 0.0, "orders": 0}}}, {"store": "milkplus（陈家祠店）", "date": "2026-08-05", "revenue": 9568.0, "discount": 5559.49, "income": 4008.51, "orders": 287, "diners": 89, "channels": {"店内销售": {"revenue": 2766.0, "income": 1815.9, "discount": 950.1, "orders": 89}, "美团外卖": {"revenue": 0.0, "income": 0.0, "discount": 0.0, "orders": 0}, "淘宝闪购": {"revenue": 6802.0, "income": 2192.61, "discount": 4609.39, "orders": 198}, "京东秒送": {"revenue": 0.0, "income": 0.0, "discount": 0.0, "orders": 0}}}, {"store": "milkplus（陈家祠店）", "date": "2026-08-04", "revenue": 8555.0, "discount": 5022.88, "income": 3532.12, "orders": 261, "diners": 67, "channels": {"店内销售": {"revenue": 1980.0, "income": 1410.4, "discount": 569.6, "orders": 67}, "美团外卖": {"revenue": 0.0, "income": 0.0, "discount": 0.0, "orders": 0}, "淘宝闪购": {"revenue": 6575.0, "income": 2121.72, "discount": 4453.28, "orders": 194}, "京东秒送": {"revenue": 0.0, "income": 0.0, "discount": 0.0, "orders": 0}}}, {"store": "milkplus（陈家祠店）", "date": "2026-08-03", "revenue": 6824.0, "discount": 3488.13, "income": 3335.87, "orders": 207, "diners": 81, "channels": {"店内销售": {"revenue": 2352.0, "income": 1852.2, "discount": 499.8, "orders": 81}, "美团外卖": {"revenue": 0.0, "income": 0.0, "discount": 0.0, "orders": 0}, "淘宝闪购": {"revenue": 4472.0, "income": 1483.67, "discount": 2988.33, "orders": 126}, "京东秒送": {"revenue": 0.0, "income": 0.0, "discount": 0.0, "orders": 0}}}, {"store": "milkplus（陈家祠店）", "date": "2026-08-02", "revenue": 3979.0, "discount": 1520.84, "income": 2458.16, "orders": 124, "diners": 75, "channels": {"店内销售": {"revenue": 2333.0, "income": 1904.9, "discount": 428.1, "orders": 75}, "美团外卖": {"revenue": 0.0, "income": 0.0, "discount": 0.0, "orders": 0}, "淘宝闪购": {"revenue": 1646.0, "income": 553.26, "discount": 1092.74, "orders": 49}, "京东秒送": {"revenue": 0.0, "income": 0.0, "discount": 0.0, "orders": 0}}}, {"store": "milkplus（陈家祠店）", "date": "2026-08-01", "revenue": 4079.0, "discount": 1261.98, "income": 2817.02, "orders": 134, "diners": 102, "channels": {"店内销售": {"revenue": 3164.0, "income": 2499.43, "discount": 664.57, "orders": 102}, "美团外卖": {"revenue": 0.0, "income": 0.0, "discount": 0.0, "orders": 0}, "淘宝闪购": {"revenue": 915.0, "income": 317.59, "discount": 597.41, "orders": 32}, "京东秒送": {"revenue": 0.0, "income": 0.0, "discount": 0.0, "orders": 0}}}];
+
+    let filteredData = [...RAW_DATA];
+    let charts = {};
+
+    function init() {
+        populateStoreFilter();
+        initCharts();
+        updateDashboard();
+        bindFilterEvents();
+    }
+
+    function populateStoreFilter() {
+        const select = document.getElementById('storeFilter');
+        const stores = [...new Set(RAW_DATA.map(d => d.store))].sort();
+        stores.forEach(s => {
+            const opt = document.createElement('option');
+            opt.value = s;
+            opt.textContent = s.replace('milkplus（', '').replace('）', '');
+            select.appendChild(opt);
+        });
+    }
+
+    function bindFilterEvents() {
+        ['monthFilter', 'storeFilter', 'channelFilter', 'groupFilter'].forEach(id => {
+            document.getElementById(id).addEventListener('change', updateDashboard);
+        });
+    }
+
+    function getFilteredData() {
+        const month = document.getElementById('monthFilter').value;
+        const store = document.getElementById('storeFilter').value;
+        const channel = document.getElementById('channelFilter').value;
+
+        let data = RAW_DATA.filter(d => {
+            if (month !== 'all' && !d.date.startsWith(month)) return false;
+            if (store !== 'all' && d.store !== store) return false;
+            return true;
+        });
+
+        if (channel !== 'all') {
+            data = data.map(d => ({
+                ...d,
+                revenue: d.channels[channel]?.revenue || 0,
+                income: d.channels[channel]?.income || 0,
+                discount: d.channels[channel]?.discount || 0,
+                orders: d.channels[channel]?.orders || 0,
+                diners: 0,
+            }));
+        }
+
+        return data;
+    }
+
+    function aggregateByDate(data) {
+        const map = {};
+        data.forEach(d => {
+            if (!map[d.date]) {
+                map[d.date] = { date: d.date, revenue: 0, income: 0, discount: 0, orders: 0, diners: 0, count: 0 };
+            }
+            map[d.date].revenue += d.revenue;
+            map[d.date].income += d.income;
+            map[d.date].discount += d.discount;
+            map[d.date].orders += d.orders;
+            map[d.date].diners += d.diners;
+            map[d.date].count++;
+        });
+        return Object.values(map).sort((a, b) => a.date.localeCompare(b.date));
+    }
+
+    function aggregateByStore(data) {
+        const map = {};
+        data.forEach(d => {
+            if (!map[d.store]) {
+                map[d.store] = { store: d.store, revenue: 0, income: 0, discount: 0, orders: 0, diners: 0, count: 0 };
+            }
+            map[d.store].revenue += d.revenue;
+            map[d.store].income += d.income;
+            map[d.store].discount += d.discount;
+            map[d.store].orders += d.orders;
+            map[d.store].diners += d.diners;
+            map[d.store].count++;
+        });
+        return Object.values(map).sort((a, b) => b.revenue - a.revenue);
+    }
+
+    function updateDashboard() {
+        const data = getFilteredData();
+        const groupBy = document.getElementById('groupFilter').value;
+        const aggregated = groupBy === 'date' ? aggregateByDate(data) : aggregateByStore(data);
+
+        updateKPIs(data);
+        updateCharts(aggregated, groupBy);
+        updateTable(data);
+    }
+
+    function updateKPIs(data) {
+        const totalRevenue = data.reduce((s, d) => s + d.revenue, 0);
+        const totalIncome = data.reduce((s, d) => s + d.income, 0);
+        const totalOrders = data.reduce((s, d) => s + d.orders, 0);
+        const avgRate = totalRevenue > 0 ? (totalIncome / totalRevenue * 100) : 0;
+
+        document.getElementById('kpiRevenue').textContent = formatMoney(totalRevenue);
+        document.getElementById('kpiIncome').textContent = formatMoney(totalIncome);
+        document.getElementById('kpiOrders').textContent = totalOrders.toLocaleString();
+        document.getElementById('kpiRate').textContent = avgRate.toFixed(1) + '%';
+    }
+
+    let currentAggregated = [];
+    let currentGroupBy = 'date';
+
+    function updateCharts(data, groupBy) {
+        currentAggregated = data;
+        currentGroupBy = groupBy;
+        const labels = groupBy === 'date' 
+            ? data.map(d => d.date.slice(5)) 
+            : data.map(d => d.store.replace('milkplus（', '').replace('）', ''));
+
+        // Revenue chart
+        charts.revenue.setOption({
+            xAxis: { data: labels },
+            series: [{
+                data: data.map(d => d.revenue)
+            }]
+        });
+
+        // Profit chart
+        charts.profit.setOption({
+            xAxis: { data: labels },
+            series: [
+                { data: data.map(d => d.income) },
+                { data: data.map(d => d.discount) }
+            ]
+        });
+
+        // Orders chart
+        charts.orders.setOption({
+            xAxis: { data: labels },
+            series: [{
+                data: data.map(d => d.orders)
+            }]
+        });
+    }
+
+    function updateTable(data) {
+        const tbody = document.getElementById('tableBody');
+        const sorted = [...data].sort((a, b) => b.date.localeCompare(a.date) || a.store.localeCompare(b.store));
+        tbody.innerHTML = sorted.map(d => `
+            <tr>
+                <td>${d.date}</td>
+                <td>${d.store.replace('milkplus（', '').replace('）', '')}</td>
+                <td class="num">${formatMoney(d.revenue)}</td>
+                <td class="num">${formatMoney(d.income)}</td>
+                <td class="num">${formatMoney(d.discount)}</td>
+                <td class="num">${d.orders.toLocaleString()}</td>
+                <td class="num">${d.diners.toLocaleString()}</td>
+                <td class="num">${d.revenue > 0 ? (d.income / d.revenue * 100).toFixed(1) : '0'}%</td>
+            </tr>
+        `).join('');
+    }
+
+    function initCharts() {
+        const groupBy = document.getElementById('groupFilter').value;
+        const initialData = aggregateByDate(RAW_DATA);
+
+        // Revenue Chart
+        charts.revenue = echarts.init(document.getElementById('chartRevenue'));
+        charts.revenue.setOption({
+            tooltip: { trigger: 'axis', formatter: params => params.map(p => p.marker + p.seriesName + ': ¥' + p.value.toLocaleString()).join('<br>') },
+            xAxis: { type: 'category', data: initialData.map(d => d.date.slice(5)), axisLabel: { fontSize: 11 } },
+            yAxis: { type: 'value', axisLabel: { formatter: v => (v/10000).toFixed(0) + '万' } },
+            series: [{ name: '营业额', type: 'bar', data: initialData.map(d => d.revenue), itemStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{offset: 0, color: '#2a5298'}, {offset: 1, color: '#5b9bd5' }]), borderRadius: [4, 4, 0, 0] }, barWidth: '50%' }],
+            grid: { left: 60, right: 20, top: 20, bottom: 30 }
+        });
+        charts.revenue.on('click', params => showDetail('revenue', params.name, null));
+
+        // Profit Chart
+        charts.profit = echarts.init(document.getElementById('chartProfit'));
+        charts.profit.setOption({
+            tooltip: { trigger: 'axis' },
+            legend: { data: ['营业收入', '优惠金额'], top: 0 },
+            xAxis: { type: 'category', data: initialData.map(d => d.date.slice(5)), axisLabel: { fontSize: 11 } },
+            yAxis: { type: 'value', axisLabel: { formatter: v => (v/10000).toFixed(0) + '万' } },
+            series: [
+                { name: '营业收入', type: 'bar', stack: 'total', data: initialData.map(d => d.income), itemStyle: { color: '#22c55e' }, barWidth: '50%' },
+                { name: '优惠金额', type: 'bar', stack: 'total', data: initialData.map(d => d.discount), itemStyle: { color: '#f97316' }, barWidth: '50%' }
+            ],
+            grid: { left: 60, right: 20, top: 40, bottom: 30 }
+        });
+        charts.profit.on('click', params => showDetail('profit', params.name, null));
+
+        // Orders Chart
+        charts.orders = echarts.init(document.getElementById('chartOrders'));
+        charts.orders.setOption({
+            tooltip: { trigger: 'axis' },
+            xAxis: { type: 'category', data: initialData.map(d => d.date.slice(5)), axisLabel: { fontSize: 11 } },
+            yAxis: { type: 'value' },
+            series: [{
+                name: '订单量', type: 'line', data: initialData.map(d => d.orders), smooth: true,
+                lineStyle: { width: 3, color: '#7c3aed' },
+                areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{offset: 0, color: 'rgba(124,58,237,0.3)'}, {offset: 1, color: 'rgba(124,58,237,0.02)'}])},
+                itemStyle: { color: '#7c3aed' },
+                symbolSize: 8
+            }],
+            grid: { left: 60, right: 20, top: 20, bottom: 30 }
+        });
+        charts.orders.on('click', params => showDetail('orders', params.name, null));
+    }
+
+    function showDetail(category, label, dataPoint) {
+        const panel = document.getElementById('detailPanel');
+        const title = document.getElementById('detailTitle');
+        const content = document.getElementById('detailContent');
+
+        title.textContent = `${label} - 数据明细`;
+
+        // Find matching data from currentAggregated
+        const item = currentAggregated.find(d => {
+            if (currentGroupBy === 'date') {
+                return d.date.slice(5) === label || d.date === label;
+            } else {
+                return d.store.includes(label) || d.store.replace('milkplus（', '').replace('）', '') === label;
+            }
+        });
+
+        if (!item) {
+            content.innerHTML = '<p style="color:#999">未找到匹配数据</p>';
+        } else {
+            // Filter raw data for this item
+            let matchingRows = [];
+            const channel = document.getElementById('channelFilter').value;
+
+            if (currentGroupBy === 'date') {
+                // Show all stores for this date
+                matchingRows = RAW_DATA.filter(d => d.date === item.date || d.date.slice(5) === label);
+            } else {
+                // Show all dates for this store
+                matchingRows = RAW_DATA.filter(d => d.store === item.store || d.store.includes(label));
+            }
+
+            let rows = '';
+            matchingRows.sort((a, b) => a.store.localeCompare(b.store)).forEach(d => {
+                rows += `<tr style="font-weight:600;border-top:2px solid #e2e8f0">
+                    <td>${currentGroupBy === 'date' ? d.store.replace('milkplus（', '').replace('）', '') : d.date.slice(5)}</td>
+                    <td class="num">${formatMoney(d.revenue)}</td>
+                    <td class="num">${formatMoney(d.income)}</td>
+                    <td class="num">${formatMoney(d.discount)}</td>
+                    <td class="num">${d.orders.toLocaleString()}</td>
+                    <td class="num">${d.revenue > 0 ? (d.income / d.revenue * 100).toFixed(1) : '0'}%</td>
+                </tr>`;
+                if (channel === 'all') {
+                    ['店内销售', '美团外卖', '淘宝闪购', '京东秒送'].forEach(ch => {
+                        const c = d.channels[ch];
+                        if (c && c.revenue > 0) {
+                            rows += `<tr style="background:#f8fafc;font-size:12px">
+                                <td style="padding-left:30px;color:#666">&#8226; ${ch}</td>
+                                <td class="num">${formatMoney(c.revenue)}</td>
+                                <td class="num">${formatMoney(c.income)}</td>
+                                <td class="num">${formatMoney(c.discount)}</td>
+                                <td class="num">${c.orders}</td>
+                                <td></td>
+                            </tr>`;
+                        }
+                    });
+                }
+            });
+
+            content.innerHTML = `
+                <div class="table-wrapper">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>${currentGroupBy === 'date' ? '门店' : '日期'}</th>
+                                <th class="num">营业额(元)</th>
+                                <th class="num">营业收入(元)</th>
+                                <th class="num">优惠金额(元)</th>
+                                <th class="num">订单量</th>
+                                <th class="num">到手率</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                </div>
+                <p style="margin-top:10px;font-size:12px;color:#999">共 ${matchingRows.length} 条记录 | 点击每条记录可查看各渠道明细</p>
+            `;
+        }
+
+        panel.classList.add('active');
+        panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    function closeDetail() {
+        document.getElementById('detailPanel').classList.remove('active');
+    }
+
+    function scrollToDetail() {
+        document.getElementById('detailPanel').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function formatMoney(val) {
+        return Math.round(val).toLocaleString();
+    }
+
+    // Handle resize
+    window.addEventListener('resize', () => {
+        Object.values(charts).forEach(c => c.resize());
+    });
+
+    init();
+    </script>
+</body>
+</html>
