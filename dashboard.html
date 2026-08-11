@@ -21,6 +21,11 @@
         .filter-group select { padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; min-width: 140px; cursor: pointer; background: #fafafa; }
         .filter-group select:focus { outline: none; border-color: #2a5298; background: white; }
         .filter-group select[multiple] { min-height: 100px; }
+        .filter-group input[type="date"] { padding: 7px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; min-width: 130px; cursor: pointer; background: #fafafa; font-family: inherit; }
+        .filter-group input[type="date"]:focus { outline: none; border-color: #2a5298; background: white; }
+        .filter-separator { color: #999; font-size: 13px; }
+        .date-preset { padding: 7px 14px; border: 1px solid #ddd; border-radius: 6px; font-size: 12px; cursor: pointer; background: #fafafa; color: #555; transition: all 0.2s; }
+        .date-preset:hover { background: #2a5298; color: white; border-color: #2a5298; }
         
         .kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 20px; }
         .kpi-card { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; }
@@ -66,11 +71,16 @@
         <!-- Filters -->
         <div class="filters">
             <div class="filter-group">
-                <label>月份：</label>
-                <select id="monthFilter">
-                    <option value="all">全部月份</option>
-                    <option value="2026-08" selected>2026年8月</option>
-                </select>
+                <label>日期：</label>
+                <input type="date" id="dateStart" value="2026-08-01">
+                <span class="filter-separator">至</span>
+                <input type="date" id="dateEnd" value="2026-08-07">
+            </div>
+            <div class="filter-group">
+                <label>快捷：</label>
+                <button class="date-preset" onclick="setDateRange('all')">全部</button>
+                <button class="date-preset" onclick="setDateRange('week')">本周</button>
+                <button class="date-preset" onclick="setDateRange('month')">本月</button>
             </div>
             <div class="filter-group">
                 <label>门店：</label>
@@ -178,6 +188,14 @@
         initCharts();
         updateDashboard();
         bindFilterEvents();
+        updateHeaderDate();
+    }
+
+    function updateHeaderDate() {
+        const dates = RAW_DATA.map(d => d.date).sort();
+        const minDate = dates[0].replace(/-/g, '/');
+        const maxDate = dates[dates.length - 1].replace(/-/g, '/');
+        document.querySelector('.header p').textContent = `营业统计周期：${minDate} - ${maxDate} | 共${new Set(RAW_DATA.map(d => d.store)).size}家门店`;
     }
 
     function populateStoreFilter() {
@@ -192,18 +210,47 @@
     }
 
     function bindFilterEvents() {
-        ['monthFilter', 'storeFilter', 'channelFilter', 'groupFilter'].forEach(id => {
+        ['dateStart', 'dateEnd', 'storeFilter', 'channelFilter', 'groupFilter'].forEach(id => {
             document.getElementById(id).addEventListener('change', updateDashboard);
         });
     }
 
+    function setDateRange(preset) {
+        const dates = RAW_DATA.map(d => d.date).sort();
+        const minDate = dates[0];
+        const maxDate = dates[dates.length - 1];
+
+        let start = minDate;
+        let end = maxDate;
+
+        if (preset === 'week') {
+            const today = maxDate;
+            const d = new Date(today);
+            d.setDate(d.getDate() - 6);
+            start = d.toISOString().slice(0, 10);
+            end = today;
+        } else if (preset === 'month') {
+            const today = maxDate;
+            const d = new Date(today);
+            d.setDate(1);
+            start = d.toISOString().slice(0, 10);
+            end = today;
+        }
+
+        document.getElementById('dateStart').value = start;
+        document.getElementById('dateEnd').value = end;
+        updateDashboard();
+    }
+
     function getFilteredData() {
-        const month = document.getElementById('monthFilter').value;
+        const dateStart = document.getElementById('dateStart').value;
+        const dateEnd = document.getElementById('dateEnd').value;
         const store = document.getElementById('storeFilter').value;
         const channel = document.getElementById('channelFilter').value;
 
         let data = RAW_DATA.filter(d => {
-            if (month !== 'all' && !d.date.startsWith(month)) return false;
+            if (dateStart && d.date < dateStart) return false;
+            if (dateEnd && d.date > dateEnd) return false;
             if (store !== 'all' && d.store !== store) return false;
             return true;
         });
