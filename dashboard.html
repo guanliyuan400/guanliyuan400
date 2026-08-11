@@ -143,6 +143,11 @@
                 <div class="value" id="kpiRate">-</div>
                 <div class="change" id="kpiRateChange">-</div>
             </div>
+            <div class="kpi-card" onclick="scrollToDetail()">
+                <div class="label">营业收入单均（元）</div>
+                <div class="value" id="kpiIncomeAvg">-</div>
+                <div class="change" id="kpiIncomeAvgChange">-</div>
+            </div>
         </div>
         
         <!-- Comparison Panel -->
@@ -194,7 +199,6 @@
                             <th class="num">营业收入</th>
                             <th class="num">优惠金额</th>
                             <th class="num">订单量</th>
-                            <th class="num">用餐人数</th>
                             <th class="num">营业额单均</th>
                         </tr>
                     </thead>
@@ -409,11 +413,13 @@
         const totalIncome = data.reduce((s, d) => s + d.income, 0);
         const totalOrders = data.reduce((s, d) => s + d.orders, 0);
         const avgRevenue = totalOrders > 0 ? Math.round(totalRevenue / totalOrders) : 0;
+        const avgIncome = totalOrders > 0 ? Math.round(totalIncome / totalOrders) : 0;
 
         document.getElementById('kpiRevenue').textContent = formatMoney(totalRevenue);
         document.getElementById('kpiIncome').textContent = formatMoney(totalIncome);
         document.getElementById('kpiOrders').textContent = totalOrders.toLocaleString();
         document.getElementById('kpiRate').textContent = '¥' + avgRevenue;
+        document.getElementById('kpiIncomeAvg').textContent = '¥' + avgIncome;
     }
 
     let currentAggregated = [];
@@ -466,7 +472,6 @@
                 <td class="num">${formatMoney(d.income)}</td>
                 <td class="num">${formatMoney(d.discount)}</td>
                 <td class="num">${d.orders.toLocaleString()}</td>
-                <td class="num">${d.diners.toLocaleString()}</td>
                 <td class="num">¥${d.orders > 0 ? Math.round(d.revenue / d.orders) : 0}</td>
             </tr>
         `).join('');
@@ -601,11 +606,17 @@
         }
 
         // Render comparison cards
+        const revAvgTarget = target.orders > 0 ? target.revenue / target.orders : 0;
+        const revAvgCompare = compare.orders > 0 ? compare.revenue / compare.orders : 0;
+        const incAvgTarget = target.orders > 0 ? target.income / target.orders : 0;
+        const incAvgCompare = compare.orders > 0 ? compare.income / compare.orders : 0;
+
         const metrics = [
             { name: '营业额', val1: target.revenue, val2: compare.revenue, unit: '元' },
             { name: '营业收入', val1: target.income, val2: compare.income, unit: '元' },
             { name: '订单量', val1: target.orders, val2: compare.orders, unit: '单' },
-            { name: '用餐人数', val1: target.diners, val2: compare.diners, unit: '人' },
+            { name: '营业额单均', val1: revAvgTarget, val2: revAvgCompare, unit: '元' },
+            { name: '营业收入单均', val1: incAvgTarget, val2: incAvgCompare, unit: '元' },
         ];
 
         document.getElementById('compareCards').innerHTML = metrics.map(m => {
@@ -613,7 +624,7 @@
             const pct = m.val2 > 0 ? ((diff / m.val2) * 100) : 0;
             const arrow = pct >= 0 ? '↑' : '↓';
             const color = pct >= 0 ? '#22c55e' : '#ef4444';
-            const fmt = (v) => m.unit === '元' ? Math.round(v).toLocaleString() : v.toLocaleString();
+            const fmt = (v) => m.unit === '元' ? (m.name.includes('单均') ? '¥' + v.toFixed(1) : Math.round(v).toLocaleString()) : v.toLocaleString();
             return `<div style="background:#f8fafc;border-radius:8px;padding:14px">
                 <div style="font-size:12px;color:#888">${m.name}</div>
                 <div style="display:flex;justify-content:space-between;margin-top:6px">
@@ -627,7 +638,7 @@
                     </div>
                 </div>
                 <div style="margin-top:6px;font-size:13px;color:${color};font-weight:600">
-                    ${arrow} ${Math.abs(diff).toLocaleString()}${m.unit === '元' ? '元' : m.unit === '单' ? '单' : '人'} (${Math.abs(pct).toFixed(1)}%)
+                    ${arrow} ${Math.abs(diff).toLocaleString()}${m.unit === '元' && !m.name.includes('单均') ? '元' : m.unit === '单' ? '单' : ''} (${Math.abs(pct).toFixed(1)}%)
                 </div>
             </div>`;
         }).join('');
@@ -639,14 +650,14 @@
             tooltip: {
                 trigger: 'axis',
                 axisPointer: { type: 'shadow' },
-                formatter: params => params.map(p => p.marker + p.seriesName + ': ' + Math.round(p.value).toLocaleString()).join('<br>')
+                formatter: params => params.map(p => p.marker + p.seriesName + ': ' + (params[0].dataIndex < 2 ? '¥' + Math.round(p.value).toLocaleString() : p.value.toLocaleString())).join('<br>')
             },
             legend: { data: [targetDate.slice(5), compareDate.slice(5)], top: 0 },
-            xAxis: { type: 'category', data: ['营业额', '营业收入', '订单量(十)', '用餐人数'] },
+            xAxis: { type: 'category', data: ['营业额', '营业收入', '订单量(十)', '营业额单均', '营业收入单均(百)'] },
             yAxis: { type: 'value' },
             series: [
-                { name: targetDate.slice(5), type: 'bar', data: [target.revenue, target.income, target.orders / 10, target.diners], itemStyle: { color: '#2a5298', borderRadius: [4, 4, 0, 0] }, barWidth: '35%' },
-                { name: compareDate.slice(5), type: 'bar', data: [compare.revenue, compare.income, compare.orders / 10, compare.diners], itemStyle: { color: '#94a3b8', borderRadius: [4, 4, 0, 0] }, barWidth: '35%' }
+                { name: targetDate.slice(5), type: 'bar', data: [target.revenue, target.income, target.orders / 10, revAvgTarget / 10, incAvgTarget / 10], itemStyle: { color: '#2a5298', borderRadius: [4, 4, 0, 0] }, barWidth: '35%' },
+                { name: compareDate.slice(5), type: 'bar', data: [compare.revenue, compare.income, compare.orders / 10, revAvgCompare / 10, incAvgCompare / 10], itemStyle: { color: '#94a3b8', borderRadius: [4, 4, 0, 0] }, barWidth: '35%' }
             ],
             grid: { left: 60, right: 20, top: 40, bottom: 30 }
         }, true);
