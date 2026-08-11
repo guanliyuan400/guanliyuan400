@@ -139,7 +139,7 @@
                 <div class="change" id="kpiOrdersChange">-</div>
             </div>
             <div class="kpi-card" onclick="scrollToDetail()">
-                <div class="label">平均到手率</div>
+                <div class="label">营业额单均（元）</div>
                 <div class="value" id="kpiRate">-</div>
                 <div class="change" id="kpiRateChange">-</div>
             </div>
@@ -195,7 +195,7 @@
                             <th class="num">优惠金额</th>
                             <th class="num">订单量</th>
                             <th class="num">用餐人数</th>
-                            <th class="num">到手率</th>
+                            <th class="num">营业额单均</th>
                         </tr>
                     </thead>
                     <tbody id="tableBody"></tbody>
@@ -408,12 +408,12 @@
         const totalRevenue = data.reduce((s, d) => s + d.revenue, 0);
         const totalIncome = data.reduce((s, d) => s + d.income, 0);
         const totalOrders = data.reduce((s, d) => s + d.orders, 0);
-        const avgRate = totalRevenue > 0 ? (totalIncome / totalRevenue * 100) : 0;
+        const avgRevenue = totalOrders > 0 ? Math.round(totalRevenue / totalOrders) : 0;
 
         document.getElementById('kpiRevenue').textContent = formatMoney(totalRevenue);
         document.getElementById('kpiIncome').textContent = formatMoney(totalIncome);
         document.getElementById('kpiOrders').textContent = totalOrders.toLocaleString();
-        document.getElementById('kpiRate').textContent = avgRate.toFixed(1) + '%';
+        document.getElementById('kpiRate').textContent = '¥' + avgRevenue;
     }
 
     let currentAggregated = [];
@@ -467,7 +467,7 @@
                 <td class="num">${formatMoney(d.discount)}</td>
                 <td class="num">${d.orders.toLocaleString()}</td>
                 <td class="num">${d.diners.toLocaleString()}</td>
-                <td class="num">${d.revenue > 0 ? (d.income / d.revenue * 100).toFixed(1) : '0'}%</td>
+                <td class="num">¥${d.orders > 0 ? Math.round(d.revenue / d.orders) : 0}</td>
             </tr>
         `).join('');
     }
@@ -720,7 +720,7 @@
                                 <th class="num">营业收入(元)</th>
                                 <th class="num">优惠金额(元)</th>
                                 <th class="num">订单量</th>
-                                <th class="num">到手率</th>
+                                <th class="num">营业额单均(元)</th>
                             </tr>
                         </thead>
                         <tbody>${rows}</tbody>
