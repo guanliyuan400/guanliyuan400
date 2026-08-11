@@ -106,8 +106,14 @@
                 <select id="compareMode" onchange="updateCompareDate()">
                     <option value="prevDay">前一天</option>
                     <option value="prevWeek">上周同日</option>
-                    <option value="custom">自定义</option>
+                    <option value="range">日期区间</option>
+                    <option value="custom">单日</option>
                 </select>
+                <span id="compareDateRange" style="display:none;align-items:center;gap:6px">
+                    <input type="date" id="compareStart" onchange="updateDashboard()">
+                    <span style="font-size:12px;color:#999">至</span>
+                    <input type="date" id="compareEnd" onchange="updateDashboard()">
+                </span>
                 <input type="date" id="compareDate" style="display:none" onchange="updateDashboard()">
                 <span id="compareDateLabel" style="font-size:13px;color:#666"></span>
                 <button class="date-preset" onclick="closeCompare()" title="关闭对比">&times;</button>
@@ -375,26 +381,36 @@
         if (!compareEnabled) return;
         const dateEnd = document.getElementById('dateEnd').value;
         const mode = document.getElementById('compareMode').value;
-        const input = document.getElementById('compareDate');
+        const singleInput = document.getElementById('compareDate');
         const label = document.getElementById('compareDateLabel');
+        const rangeWrap = document.getElementById('compareDateRange');
+        const rangeStart = document.getElementById('compareStart');
+        const rangeEnd = document.getElementById('compareEnd');
 
-        if (mode === 'custom') {
-            input.style.display = '';
-            label.textContent = '';
-            if (!input.value) {
-                input.value = dateEnd;
+        singleInput.style.display = 'none';
+        rangeWrap.style.display = 'none';
+        label.textContent = '';
+
+        if (mode === 'range') {
+            rangeWrap.style.display = 'flex';
+            if (!rangeEnd.value) rangeEnd.value = dateEnd;
+            if (!rangeStart.value) {
+                const d = new Date(dateEnd);
+                d.setDate(d.getDate() - 6);
+                rangeStart.value = d.toISOString().slice(0, 10);
             }
+        } else if (mode === 'custom') {
+            singleInput.style.display = '';
+            if (!singleInput.value) singleInput.value = dateEnd;
         } else {
-            input.style.display = 'none';
             const d = new Date(dateEnd);
             if (mode === 'prevDay') {
                 d.setDate(d.getDate() - 1);
             } else if (mode === 'prevWeek') {
                 d.setDate(d.getDate() - 7);
             }
-            const targetDate = d.toISOString().slice(0, 10);
-            input.value = targetDate;
-            label.textContent = targetDate;
+            singleInput.value = d.toISOString().slice(0, 10);
+            label.textContent = singleInput.value;
         }
         updateDashboard();
     }
@@ -411,11 +427,15 @@
         // Handle comparison
         const compareSection = document.getElementById('compareSection');
         const dateEnd = document.getElementById('dateEnd').value;
-        const compareTarget = document.getElementById('compareDate').value;
+        const compareModeEl = document.getElementById('compareMode');
+        const compareMode = compareModeEl ? compareModeEl.value : 'none';
+        const singleCompare = document.getElementById('compareDate').value;
+        const compareStart = document.getElementById('compareStart').value;
+        const compareEnd = document.getElementById('compareEnd').value;
 
-        if (compareEnabled && dateEnd && compareTarget) {
+        if (compareEnabled && dateEnd) {
             compareSection.style.display = '';
-            renderComparison(dateEnd, compareTarget, aggregated);
+            renderComparison(dateEnd, singleCompare, compareStart, compareEnd, compareMode, aggregated);
         } else {
             compareSection.style.display = 'none';
         }
@@ -587,13 +607,12 @@
         });
     }
 
-    function renderComparison(targetDate, compareDate, aggregated) {
-        // Find data for target and comparison dates
+    function renderComparison(targetDate, singleCompare, compareStart, compareEnd, compareMode, aggregated) {
+        // Find data for target date
         const findItem = (dateStr) => {
             if (aggregated[0] && aggregated[0].date) {
                 return aggregated.find(d => d.date === dateStr);
             }
-            // If grouped by store, we need to calculate totals for that date from RAW_DATA
             const dayData = RAW_DATA.filter(d => d.date === dateStr);
             if (!dayData.length) return null;
             return {
@@ -605,19 +624,46 @@
             };
         };
 
+        // Aggregate data for a date range
+        const findRangeItem = (startStr, endStr) => {
+            const rangeData = RAW_DATA.filter(d => d.date >= startStr && d.date <= endStr);
+            if (!rangeData.length) return null;
+            return {
+                revenue: rangeData.reduce((s, d) => s + d.revenue, 0),
+                income: rangeData.reduce((s, d) => s + d.income, 0),
+                discount: rangeData.reduce((s, d) => s + d.discount, 0),
+                orders: rangeData.reduce((s, d) => s + d.orders, 0),
+                diners: rangeData.reduce((s, d) => s + d.diners, 0),
+                days: new Set(rangeData.map(d => d.date)).size,
+            };
+        };
+
         if (!charts.compare) {
             charts.compare = echarts.init(document.getElementById('compareBarChart'));
         }
         setTimeout(() => charts.compare.resize(), 50);
 
         const target = findItem(targetDate);
-        const compare = findItem(compareDate);
+        let compare, compareLabel, isRangeCompare;
+
+        if (compareMode === 'range' && compareStart && compareEnd) {
+            compare = findRangeItem(compareStart, compareEnd);
+            compareLabel = compareStart.slice(5) + '~' + compareEnd.slice(5);
+            isRangeCompare = true;
+        } else {
+            compare = findItem(singleCompare);
+            compareLabel = singleCompare;
+            isRangeCompare = false;
+        }
 
         if (!target || !compare) {
             document.getElementById('compareCards').innerHTML = '<p style="color:#999">所选日期范围内无数据</p>';
             charts.compare.clear();
             return;
         }
+
+        // Add days info for range
+        const daysInfo = isRangeCompare && compare.days ? ` (${compare.days}天均值)` : '';
 
         // Render comparison cards
         const revAvgTarget = target.orders > 0 ? target.revenue / target.orders : 0;
@@ -639,6 +685,7 @@
             const arrow = pct >= 0 ? '↑' : '↓';
             const color = pct >= 0 ? '#22c55e' : '#ef4444';
             const fmt = (v) => m.unit === '元' ? (m.name.includes('单均') ? '¥' + v.toFixed(1) : Math.round(v).toLocaleString()) : v.toLocaleString();
+            const diffUnit = m.unit === '元' && !m.name.includes('单均') ? '元' : m.unit === '单' ? '单' : '';
             return `<div style="background:#f8fafc;border-radius:8px;padding:14px">
                 <div style="font-size:12px;color:#888">${m.name}</div>
                 <div style="display:flex;justify-content:space-between;margin-top:6px">
@@ -647,17 +694,17 @@
                         <div style="font-size:20px;font-weight:700;color:#1e3c72">${fmt(m.val1)}</div>
                     </div>
                     <div style="text-align:right">
-                        <div style="font-size:11px;color:#999">${compareDate.slice(5)}</div>
+                        <div style="font-size:11px;color:#999">${compareLabel.slice(5)}${daysInfo}</div>
                         <div style="font-size:15px;color:#666">${fmt(m.val2)}</div>
                     </div>
                 </div>
                 <div style="margin-top:6px;font-size:13px;color:${color};font-weight:600">
-                    ${arrow} ${Math.abs(diff).toLocaleString()}${m.unit === '元' && !m.name.includes('单均') ? '元' : m.unit === '单' ? '单' : ''} (${Math.abs(pct).toFixed(1)}%)
+                    ${arrow} ${Math.abs(diff).toLocaleString()}${diffUnit} (${Math.abs(pct).toFixed(1)}%)
                 </div>
             </div>`;
         }).join('');
 
-        document.getElementById('compareTitle').textContent = `数据对比：${targetDate.slice(5)} vs ${compareDate.slice(5)}`;
+        document.getElementById('compareTitle').textContent = `数据对比：${targetDate.slice(5)} vs ${compareLabel.slice(5)}${daysInfo}`;
 
         // Render bar chart - side by side comparison
         charts.compare.setOption({
@@ -666,12 +713,12 @@
                 axisPointer: { type: 'shadow' },
                 formatter: params => params.map(p => p.marker + p.seriesName + ': ' + (params[0].dataIndex < 2 ? '¥' + Math.round(p.value).toLocaleString() : p.value.toLocaleString())).join('<br>')
             },
-            legend: { data: [targetDate.slice(5), compareDate.slice(5)], top: 0 },
+            legend: { data: [targetDate.slice(5), compareLabel.slice(5) + (isRangeCompare ? ' (区间)' : '')], top: 0 },
             xAxis: { type: 'category', data: ['营业额', '营业收入', '订单量(十)', '营业额单均', '营业收入单均(百)'] },
             yAxis: { type: 'value' },
             series: [
                 { name: targetDate.slice(5), type: 'bar', data: [target.revenue, target.income, target.orders / 10, revAvgTarget / 10, incAvgTarget / 10], itemStyle: { color: '#2a5298', borderRadius: [4, 4, 0, 0] }, barWidth: '35%' },
-                { name: compareDate.slice(5), type: 'bar', data: [compare.revenue, compare.income, compare.orders / 10, revAvgCompare / 10, incAvgCompare / 10], itemStyle: { color: '#94a3b8', borderRadius: [4, 4, 0, 0] }, barWidth: '35%' }
+                { name: compareLabel.slice(5) + (isRangeCompare ? ' (区间)' : ''), type: 'bar', data: [compare.revenue, compare.income, compare.orders / 10, revAvgCompare / 10, incAvgCompare / 10], itemStyle: { color: '#94a3b8', borderRadius: [4, 4, 0, 0] }, barWidth: '35%' }
             ],
             grid: { left: 60, right: 20, top: 40, bottom: 30 }
         }, true);
