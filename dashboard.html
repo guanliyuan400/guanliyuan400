@@ -84,14 +84,14 @@
             </div>
             <div class="filter-group">
                 <label>门店：</label>
-                <select id="storeFilter">
-                    <option value="all">全部门店</option>
+                <select id="storeFilter" multiple size="1" style="min-height:36px">
+                    <option value="all" selected>全部门店</option>
                 </select>
             </div>
             <div class="filter-group">
                 <label>业务类型：</label>
-                <select id="channelFilter">
-                    <option value="all">全部渠道</option>
+                <select id="channelFilter" multiple size="1" style="min-height:36px">
+                    <option value="all" selected>全部渠道</option>
                     <option value="店内销售">店内销售</option>
                     <option value="美团外卖">美团外卖</option>
                     <option value="淘宝闪购">淘宝闪购</option>
@@ -276,28 +276,40 @@
         updateDashboard();
     }
 
+    function getSelectedValues(selectEl) {
+        const selected = Array.from(selectEl.selectedOptions).map(o => o.value);
+        return selected;
+    }
+
     function getFilteredData() {
         const dateStart = document.getElementById('dateStart').value;
         const dateEnd = document.getElementById('dateEnd').value;
-        const store = document.getElementById('storeFilter').value;
-        const channel = document.getElementById('channelFilter').value;
+        const storeSelected = getSelectedValues(document.getElementById('storeFilter'));
+        const channelSelected = getSelectedValues(document.getElementById('channelFilter'));
+
+        const storeAll = storeSelected.includes('all');
+        const channelAll = channelSelected.includes('all');
 
         let data = RAW_DATA.filter(d => {
             if (dateStart && d.date < dateStart) return false;
             if (dateEnd && d.date > dateEnd) return false;
-            if (store !== 'all' && d.store !== store) return false;
+            if (!storeAll && !storeSelected.includes(d.store)) return false;
             return true;
         });
 
-        if (channel !== 'all') {
-            data = data.map(d => ({
-                ...d,
-                revenue: d.channels[channel]?.revenue || 0,
-                income: d.channels[channel]?.income || 0,
-                discount: d.channels[channel]?.discount || 0,
-                orders: d.channels[channel]?.orders || 0,
-                diners: 0,
-            }));
+        if (!channelAll && channelSelected.length > 0) {
+            data = data.map(d => {
+                let revenue = 0, income = 0, discount = 0, orders = 0;
+                channelSelected.forEach(ch => {
+                    if (d.channels[ch]) {
+                        revenue += d.channels[ch].revenue;
+                        income += d.channels[ch].income;
+                        discount += d.channels[ch].discount;
+                        orders += d.channels[ch].orders;
+                    }
+                });
+                return { ...d, revenue, income, discount, orders, diners: 0 };
+            });
         }
 
         return data;
