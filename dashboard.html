@@ -99,11 +99,18 @@
                 </select>
             </div>
             <div class="filter-group">
-                <label>对比方式：</label>
-                <select id="compareFilter">
-                    <option value="none">无对比</option>
-                    <option value="mom">环比（相邻周期）</option>
+                <label>对比：</label>
+                <button class="date-preset" id="btnCompare" onclick="toggleCompare()">+ 添加对比</button>
+            </div>
+            <div class="filter-group" id="compareOpts" style="display:none;align-items:center;gap:8px">
+                <select id="compareMode" onchange="updateCompareDate()">
+                    <option value="prevDay">前一天</option>
+                    <option value="prevWeek">上周同日</option>
+                    <option value="custom">自定义</option>
                 </select>
+                <input type="date" id="compareDate" style="display:none" onchange="updateDashboard()">
+                <span id="compareDateLabel" style="font-size:13px;color:#666"></span>
+                <button class="date-preset" onclick="closeCompare()" title="关闭对比">&times;</button>
             </div>
             <div class="filter-group">
                 <label>分组方式：</label>
@@ -138,11 +145,12 @@
             </div>
         </div>
         
-        <!-- Growth Chart (hidden by default) -->
+        <!-- Comparison Panel -->
         <div class="charts-grid" id="compareSection" style="display:none">
             <div class="chart-card full">
-                <h3>环比增长率趋势（%）</h3>
-                <div class="chart" id="chartGrowth" style="height:300px"></div>
+                <h3 id="compareTitle">数据对比</h3>
+                <div id="compareCards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px"></div>
+                <div id="compareBarChart" style="height:300px"></div>
             </div>
         </div>
 
@@ -225,9 +233,11 @@
     }
 
     function bindFilterEvents() {
-        ['dateStart', 'dateEnd', 'storeFilter', 'channelFilter', 'groupFilter', 'compareFilter'].forEach(id => {
+        ['storeFilter', 'channelFilter', 'groupFilter'].forEach(id => {
             document.getElementById(id).addEventListener('change', updateDashboard);
         });
+        document.getElementById('dateStart').addEventListener('change', function() { updateCompareDate(); });
+        document.getElementById('dateEnd').addEventListener('change', function() { updateCompareDate(); });
     }
 
     function setDateRange(preset) {
@@ -316,27 +326,75 @@
         return Object.values(map).sort((a, b) => b.revenue - a.revenue);
     }
 
+    let compareEnabled = false;
+
+    function toggleCompare() {
+        compareEnabled = !compareEnabled;
+        if (compareEnabled) {
+            document.getElementById('compareOpts').style.display = 'flex';
+            document.getElementById('btnCompare').textContent = '取消对比';
+            updateCompareDate();
+        } else {
+            closeCompare();
+        }
+    }
+
+    function closeCompare() {
+        compareEnabled = false;
+        document.getElementById('compareOpts').style.display = 'none';
+        document.getElementById('btnCompare').textContent = '+ 添加对比';
+        document.getElementById('compareSection').style.display = 'none';
+        // Reset compare chart if it exists
+        if (charts.compare) {
+            charts.compare.clear();
+        }
+    }
+
+    function updateCompareDate() {
+        if (!compareEnabled) return;
+        const dateEnd = document.getElementById('dateEnd').value;
+        const mode = document.getElementById('compareMode').value;
+        const input = document.getElementById('compareDate');
+        const label = document.getElementById('compareDateLabel');
+
+        if (mode === 'custom') {
+            input.style.display = '';
+            label.textContent = '';
+            if (!input.value) {
+                input.value = dateEnd;
+            }
+        } else {
+            input.style.display = 'none';
+            const d = new Date(dateEnd);
+            if (mode === 'prevDay') {
+                d.setDate(d.getDate() - 1);
+            } else if (mode === 'prevWeek') {
+                d.setDate(d.getDate() - 7);
+            }
+            const targetDate = d.toISOString().slice(0, 10);
+            input.value = targetDate;
+            label.textContent = targetDate;
+        }
+        updateDashboard();
+    }
+
     function updateDashboard() {
         const data = getFilteredData();
         const groupBy = document.getElementById('groupFilter').value;
-        const compareMode = document.getElementById('compareFilter').value;
         const aggregated = groupBy === 'date' ? aggregateByDate(data) : aggregateByStore(data);
 
         updateKPIs(data);
         updateCharts(aggregated, groupBy);
         updateTable(data);
 
-        // Handle comparison mode
+        // Handle comparison
         const compareSection = document.getElementById('compareSection');
-        if (compareMode === 'mom') {
+        const dateEnd = document.getElementById('dateEnd').value;
+        const compareTarget = document.getElementById('compareDate').value;
+
+        if (compareEnabled && dateEnd && compareTarget) {
             compareSection.style.display = '';
-            if (!charts.growth) {
-                charts.growth = echarts.init(document.getElementById('chartGrowth'));
-            }
-            setTimeout(() => {
-                charts.growth.resize();
-                renderGrowthChart(aggregated);
-            }, 50);
+            renderComparison(dateEnd, compareTarget, aggregated);
         } else {
             compareSection.style.display = 'none';
         }
@@ -454,52 +512,92 @@
         });
         charts.orders.on('click', params => showDetail('orders', params.name, null));
 
-        charts.growth = null;
+        charts.compare = null;
     }
 
 
-    function renderGrowthChart(data) {
-        if (!data || data.length < 2) {
-            charts.growth.setOption({
-                title: { text: '数据不足，无法计算环比', left: 'center', top: 'center', textStyle: { color: '#999' } },
-                series: []
-            });
+    function renderComparison(targetDate, compareDate, aggregated) {
+        // Find data for target and comparison dates
+        const findItem = (dateStr) => {
+            if (aggregated[0] && aggregated[0].date) {
+                return aggregated.find(d => d.date === dateStr);
+            }
+            // If grouped by store, we need to calculate totals for that date from RAW_DATA
+            const dayData = RAW_DATA.filter(d => d.date === dateStr);
+            if (!dayData.length) return null;
+            return {
+                revenue: dayData.reduce((s, d) => s + d.revenue, 0),
+                income: dayData.reduce((s, d) => s + d.income, 0),
+                discount: dayData.reduce((s, d) => s + d.discount, 0),
+                orders: dayData.reduce((s, d) => s + d.orders, 0),
+                diners: dayData.reduce((s, d) => s + d.diners, 0),
+            };
+        };
+
+        if (!charts.compare) {
+            charts.compare = echarts.init(document.getElementById('compareBarChart'));
+        }
+        setTimeout(() => charts.compare.resize(), 50);
+
+        const target = findItem(targetDate);
+        const compare = findItem(compareDate);
+
+        if (!target || !compare) {
+            document.getElementById('compareCards').innerHTML = '<p style="color:#999">所选日期范围内无数据</p>';
+            charts.compare.clear();
             return;
         }
 
-        const labels = data.map(d => d.date ? d.date.slice(5) : (d.store ? d.store.replace('milkplus（', '').replace('）', '') : ''));
+        // Render comparison cards
+        const metrics = [
+            { name: '营业额', val1: target.revenue, val2: compare.revenue, unit: '元' },
+            { name: '营业收入', val1: target.income, val2: compare.income, unit: '元' },
+            { name: '订单量', val1: target.orders, val2: compare.orders, unit: '单' },
+            { name: '用餐人数', val1: target.diners, val2: compare.diners, unit: '人' },
+        ];
 
-        const revenueGrowth = [];
-        const incomeGrowth = [];
-        const ordersGrowth = [];
+        document.getElementById('compareCards').innerHTML = metrics.map(m => {
+            const diff = m.val1 - m.val2;
+            const pct = m.val2 > 0 ? ((diff / m.val2) * 100) : 0;
+            const arrow = pct >= 0 ? '↑' : '↓';
+            const color = pct >= 0 ? '#22c55e' : '#ef4444';
+            const fmt = (v) => m.unit === '元' ? Math.round(v).toLocaleString() : v.toLocaleString();
+            return `<div style="background:#f8fafc;border-radius:8px;padding:14px">
+                <div style="font-size:12px;color:#888">${m.name}</div>
+                <div style="display:flex;justify-content:space-between;margin-top:6px">
+                    <div>
+                        <div style="font-size:11px;color:#999">${targetDate.slice(5)}</div>
+                        <div style="font-size:20px;font-weight:700;color:#1e3c72">${fmt(m.val1)}</div>
+                    </div>
+                    <div style="text-align:right">
+                        <div style="font-size:11px;color:#999">${compareDate.slice(5)}</div>
+                        <div style="font-size:15px;color:#666">${fmt(m.val2)}</div>
+                    </div>
+                </div>
+                <div style="margin-top:6px;font-size:13px;color:${color};font-weight:600">
+                    ${arrow} ${Math.abs(diff).toLocaleString()}${m.unit === '元' ? '元' : m.unit === '单' ? '单' : '人'} (${Math.abs(pct).toFixed(1)}%)
+                </div>
+            </div>`;
+        }).join('');
 
-        for (let i = 1; i < data.length; i++) {
-            const prev = data[i - 1];
-            const curr = data[i];
-            revenueGrowth.push(prev.revenue > 0 ? ((curr.revenue - prev.revenue) / prev.revenue * 100) : 0);
-            incomeGrowth.push(prev.income > 0 ? ((curr.income - prev.income) / prev.income * 100) : 0);
-            ordersGrowth.push(prev.orders > 0 ? ((curr.orders - prev.orders) / prev.orders * 100) : 0);
-        }
+        document.getElementById('compareTitle').textContent = `数据对比：${targetDate.slice(5)} vs ${compareDate.slice(5)}`;
 
-        charts.growth.setOption({
+        // Render bar chart - side by side comparison
+        charts.compare.setOption({
             tooltip: {
                 trigger: 'axis',
-                formatter: params => params.map(p => p.marker + p.seriesName + ': ' + p.value.toFixed(1) + '%').join('<br>')
+                axisPointer: { type: 'shadow' },
+                formatter: params => params.map(p => p.marker + p.seriesName + ': ' + Math.round(p.value).toLocaleString()).join('<br>')
             },
-            legend: { data: ['营业额增长', '营业收入增长', '订单量增长'], top: 0 },
-            xAxis: { type: 'category', data: labels.slice(1), axisLabel: { fontSize: 11 } },
-            yAxis: {
-                type: 'value',
-                axisLabel: { formatter: v => v.toFixed(0) + '%' },
-                splitLine: { lineStyle: { type: 'dashed', color: '#e2e8f0' } }
-            },
+            legend: { data: [targetDate.slice(5), compareDate.slice(5)], top: 0 },
+            xAxis: { type: 'category', data: ['营业额', '营业收入', '订单量(十)', '用餐人数'] },
+            yAxis: { type: 'value' },
             series: [
-                { name: '营业额增长', type: 'line', data: revenueGrowth, smooth: true, lineStyle: { width: 2, color: '#2a5298' }, itemStyle: { color: '#2a5298' }, symbolSize: 6 },
-                { name: '营业收入增长', type: 'line', data: incomeGrowth, smooth: true, lineStyle: { width: 2, color: '#22c55e' }, itemStyle: { color: '#22c55e' }, symbolSize: 6 },
-                { name: '订单量增长', type: 'line', data: ordersGrowth, smooth: true, lineStyle: { width: 2, color: '#7c3aed' }, itemStyle: { color: '#7c3aed' }, symbolSize: 6 }
+                { name: targetDate.slice(5), type: 'bar', data: [target.revenue, target.income, target.orders / 10, target.diners], itemStyle: { color: '#2a5298', borderRadius: [4, 4, 0, 0] }, barWidth: '35%' },
+                { name: compareDate.slice(5), type: 'bar', data: [compare.revenue, compare.income, compare.orders / 10, compare.diners], itemStyle: { color: '#94a3b8', borderRadius: [4, 4, 0, 0] }, barWidth: '35%' }
             ],
             grid: { left: 60, right: 20, top: 40, bottom: 30 }
-        });
+        }, true);
     }
 
     function showDetail(category, label, dataPoint) {
@@ -598,7 +696,7 @@
 
     // Handle resize
     window.addEventListener('resize', () => {
-        Object.values(charts).forEach(c => c.resize());
+        Object.values(charts).forEach(c => c && c.resize());
     });
 
     init();
