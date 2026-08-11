@@ -714,11 +714,11 @@
                 formatter: params => params.map(p => p.marker + p.seriesName + ': ' + (params[0].dataIndex < 2 ? '¥' + Math.round(p.value).toLocaleString() : p.value.toLocaleString())).join('<br>')
             },
             legend: { data: [targetDate.slice(5), compareLabel.slice(5) + (isRangeCompare ? ' (区间)' : '')], top: 0 },
-            xAxis: { type: 'category', data: ['营业额', '营业收入', '订单量(十)', '营业额单均', '营业收入单均(百)'] },
+            xAxis: { type: 'category', data: ['营业额(万元)', '营业收入(万元)', '订单量(百)', '营业额单均(元)', '营业收入单均(元)'] },
             yAxis: { type: 'value' },
             series: [
-                { name: targetDate.slice(5), type: 'bar', data: [target.revenue, target.income, target.orders / 10, revAvgTarget / 10, incAvgTarget / 10], itemStyle: { color: '#2a5298', borderRadius: [4, 4, 0, 0] }, barWidth: '35%' },
-                { name: compareLabel.slice(5) + (isRangeCompare ? ' (区间)' : ''), type: 'bar', data: [compare.revenue, compare.income, compare.orders / 10, revAvgCompare / 10, incAvgCompare / 10], itemStyle: { color: '#94a3b8', borderRadius: [4, 4, 0, 0] }, barWidth: '35%' }
+{name: targetDate.slice(5), type: 'bar', data: [+(target.revenue / 10000).toFixed(1), +(target.income / 10000).toFixed(1), +(target.orders / 100).toFixed(0), +revAvgTarget.toFixed(1), +incAvgTarget.toFixed(1)], itemStyle: { color: '#2a5298', borderRadius: [4, 4, 0, 0] }, barWidth: '35%'},
+                { name: compareLabel.slice(5) + (isRangeCompare ? ' (区间)' : ''), type: 'bar', data: [+(compare.revenue / 10000).toFixed(1), +(compare.income / 10000).toFixed(1), +(compare.orders / 100).toFixed(0), +revAvgCompare.toFixed(1), +incAvgCompare.toFixed(1)], itemStyle: { color: '#94a3b8', borderRadius: [4, 4, 0, 0] }, barWidth: '35%' }
             ],
             grid: { left: 60, right: 20, top: 40, bottom: 30 }
         }, true);
