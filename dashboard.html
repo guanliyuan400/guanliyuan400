@@ -99,6 +99,13 @@
                 </select>
             </div>
             <div class="filter-group">
+                <label>对比方式：</label>
+                <select id="compareFilter">
+                    <option value="none">无对比</option>
+                    <option value="mom">环比（相邻周期）</option>
+                </select>
+            </div>
+            <div class="filter-group">
                 <label>分组方式：</label>
                 <select id="groupFilter">
                     <option value="date">按日期</option>
@@ -131,6 +138,14 @@
             </div>
         </div>
         
+        <!-- Growth Chart (hidden by default) -->
+        <div class="charts-grid" id="compareSection" style="display:none">
+            <div class="chart-card full">
+                <h3>环比增长率趋势（%）</h3>
+                <div class="chart" id="chartGrowth" style="height:300px"></div>
+            </div>
+        </div>
+
         <!-- Charts -->
         <div class="charts-grid">
             <div class="chart-card">
@@ -210,7 +225,7 @@
     }
 
     function bindFilterEvents() {
-        ['dateStart', 'dateEnd', 'storeFilter', 'channelFilter', 'groupFilter'].forEach(id => {
+        ['dateStart', 'dateEnd', 'storeFilter', 'channelFilter', 'groupFilter', 'compareFilter'].forEach(id => {
             document.getElementById(id).addEventListener('change', updateDashboard);
         });
     }
@@ -304,11 +319,27 @@
     function updateDashboard() {
         const data = getFilteredData();
         const groupBy = document.getElementById('groupFilter').value;
+        const compareMode = document.getElementById('compareFilter').value;
         const aggregated = groupBy === 'date' ? aggregateByDate(data) : aggregateByStore(data);
 
         updateKPIs(data);
         updateCharts(aggregated, groupBy);
         updateTable(data);
+
+        // Handle comparison mode
+        const compareSection = document.getElementById('compareSection');
+        if (compareMode === 'mom') {
+            compareSection.style.display = '';
+            if (!charts.growth) {
+                charts.growth = echarts.init(document.getElementById('chartGrowth'));
+            }
+            setTimeout(() => {
+                charts.growth.resize();
+                renderGrowthChart(aggregated);
+            }, 50);
+        } else {
+            compareSection.style.display = 'none';
+        }
     }
 
     function updateKPIs(data) {
@@ -422,6 +453,53 @@
             grid: { left: 60, right: 20, top: 20, bottom: 30 }
         });
         charts.orders.on('click', params => showDetail('orders', params.name, null));
+
+        charts.growth = null;
+    }
+
+
+    function renderGrowthChart(data) {
+        if (!data || data.length < 2) {
+            charts.growth.setOption({
+                title: { text: '数据不足，无法计算环比', left: 'center', top: 'center', textStyle: { color: '#999' } },
+                series: []
+            });
+            return;
+        }
+
+        const labels = data.map(d => d.date ? d.date.slice(5) : (d.store ? d.store.replace('milkplus（', '').replace('）', '') : ''));
+
+        const revenueGrowth = [];
+        const incomeGrowth = [];
+        const ordersGrowth = [];
+
+        for (let i = 1; i < data.length; i++) {
+            const prev = data[i - 1];
+            const curr = data[i];
+            revenueGrowth.push(prev.revenue > 0 ? ((curr.revenue - prev.revenue) / prev.revenue * 100) : 0);
+            incomeGrowth.push(prev.income > 0 ? ((curr.income - prev.income) / prev.income * 100) : 0);
+            ordersGrowth.push(prev.orders > 0 ? ((curr.orders - prev.orders) / prev.orders * 100) : 0);
+        }
+
+        charts.growth.setOption({
+            tooltip: {
+                trigger: 'axis',
+                formatter: params => params.map(p => p.marker + p.seriesName + ': ' + p.value.toFixed(1) + '%').join('<br>')
+            },
+            legend: { data: ['营业额增长', '营业收入增长', '订单量增长'], top: 0 },
+            xAxis: { type: 'category', data: labels.slice(1), axisLabel: { fontSize: 11 } },
+            yAxis: {
+                type: 'value',
+                axisLabel: { formatter: v => v.toFixed(0) + '%' },
+                splitLine: { lineStyle: { type: 'dashed', color: '#e2e8f0' } }
+            },
+            series: [
+                { name: '营业额增长', type: 'line', data: revenueGrowth, smooth: true, lineStyle: { width: 2, color: '#2a5298' }, itemStyle: { color: '#2a5298' }, symbolSize: 6 },
+                { name: '营业收入增长', type: 'line', data: incomeGrowth, smooth: true, lineStyle: { width: 2, color: '#22c55e' }, itemStyle: { color: '#22c55e' }, symbolSize: 6 },
+                { name: '订单量增长', type: 'line', data: ordersGrowth, smooth: true, lineStyle: { width: 2, color: '#7c3aed' }, itemStyle: { color: '#7c3aed' }, symbolSize: 6 }
+            ],
+            grid: { left: 60, right: 20, top: 40, bottom: 30 }
+        });
     }
 
     function showDetail(category, label, dataPoint) {
