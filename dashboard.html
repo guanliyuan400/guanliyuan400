@@ -200,6 +200,7 @@
                             <th class="num">优惠金额</th>
                             <th class="num">订单量</th>
                             <th class="num">营业额单均</th>
+                            <th class="num">营业收入单均</th>
                         </tr>
                     </thead>
                     <tbody id="tableBody"></tbody>
@@ -473,6 +474,7 @@
                 <td class="num">${formatMoney(d.discount)}</td>
                 <td class="num">${d.orders.toLocaleString()}</td>
                 <td class="num">¥${d.orders > 0 ? Math.round(d.revenue / d.orders) : 0}</td>
+                <td class="num">¥${d.orders > 0 ? Math.round(d.income / d.orders) : 0}</td>
             </tr>
         `).join('');
     }
