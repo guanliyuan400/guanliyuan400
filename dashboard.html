@@ -420,7 +420,10 @@
     }
 
     function updateCompareDate() {
-        if (!compareEnabled) return;
+        if (!compareEnabled) {
+            updateDashboard();
+            return;
+        }
         const dateEnd = document.getElementById('dateEnd').value;
         const mode = document.getElementById('compareMode').value;
         const singleInput = document.getElementById('compareDate');
