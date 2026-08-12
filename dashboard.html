@@ -98,9 +98,9 @@
         <div class="filters">
             <div class="filter-group">
                 <label>日期：</label>
-                <input type="date" id="dateStart" value="2026-08-01">
+                <input type="date" id="dateStart">
                 <span class="filter-separator">至</span>
-                <input type="date" id="dateEnd" value="2026-08-07">
+                <input type="date" id="dateEnd">
             </div>
             <div class="filter-group">
                 <label>快捷：</label>
@@ -264,6 +264,12 @@
     let charts = {};
 
     function init() {
+        // Dynamically set default dates from actual data range
+        const dates = RAW_DATA.map(d => d.date).sort();
+        if (dates.length > 0) {
+            document.getElementById('dateStart').value = dates[0];
+            document.getElementById('dateEnd').value = dates[dates.length - 1];
+        }
         populateStoreFilter();
         initCharts();
         updateDashboard();
