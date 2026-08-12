@@ -661,8 +661,34 @@
     }
 
     function getFilteredRawData() {
-        // Returns filtered RAW_DATA respecting all current filters
-        return getFilteredData();
+        // Returns filtered RAW_DATA respecting store & channel filters, but NOT main date range
+        // (so comparison can look up data outside the current period)
+        const storeSelected = getSelectedValues(document.getElementById('storeFilter'));
+        const channelSelected = getSelectedValues(document.getElementById('channelFilter'));
+        const storeAll = storeSelected.includes('all');
+        const channelAll = channelSelected.includes('all');
+
+        let data = RAW_DATA.filter(d => {
+            if (!storeAll && !storeSelected.includes(d.store)) return false;
+            return true;
+        });
+
+        if (!channelAll && channelSelected.length > 0) {
+            data = data.map(d => {
+                let revenue = 0, income = 0, discount = 0, orders = 0;
+                channelSelected.forEach(ch => {
+                    if (d.channels[ch]) {
+                        revenue += d.channels[ch].revenue;
+                        income += d.channels[ch].income;
+                        discount += d.channels[ch].discount;
+                        orders += d.channels[ch].orders;
+                    }
+                });
+                return { ...d, revenue, income, discount, orders, diners: 0 };
+            });
+        }
+
+        return data;
     }
 
     function aggregateByDateOrNull(data) {
