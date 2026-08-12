@@ -477,6 +477,7 @@
 
         // Handle comparison
         const compareSection = document.getElementById('compareSection');
+        const dateStart = document.getElementById('dateStart').value;
         const dateEnd = document.getElementById('dateEnd').value;
         const compareModeEl = document.getElementById('compareMode');
         const compareMode = compareModeEl ? compareModeEl.value : 'none';
@@ -484,9 +485,9 @@
         const compareStart = document.getElementById('compareStart').value;
         const compareEnd = document.getElementById('compareEnd').value;
 
-        if (compareEnabled && dateEnd) {
+        if (compareEnabled && dateStart && dateEnd) {
             compareSection.style.display = '';
-            renderComparison(dateEnd, singleCompare, compareStart, compareEnd, compareMode, aggregated);
+            renderComparison(dateStart, dateEnd, singleCompare, compareStart, compareEnd, compareMode, aggregated);
         } else {
             compareSection.style.display = 'none';
         }
@@ -708,7 +709,7 @@
         return Object.values(map).sort((a, b) => a.date.localeCompare(b.date));
     }
 
-    function renderComparison(targetDate, singleCompare, compareStart, compareEnd, compareMode, aggregated) {
+    function renderComparison(targetStart, targetEnd, singleCompare, compareStart, compareEnd, compareMode, aggregated) {
         // Uses filtered data to respect store/channel filters
         const filteredData = getFilteredRawData();
 
@@ -742,7 +743,7 @@
         }
         setTimeout(() => charts.compare.resize(), 50);
 
-        const target = findItemFromFiltered(targetDate);
+        const target = findRangeFromFiltered(targetStart, targetEnd);
         let compare, compareLabel, isRangeCompare;
 
         if (compareMode === 'range' && compareStart && compareEnd) {
@@ -761,6 +762,7 @@
             return;
         }
 
+        const targetDaysInfo = target && target.days ? ` (${target.days}天)` : '';
         const daysInfo = isRangeCompare && compare.days ? ` (${compare.days}天)` : '';
 
         // Render comparison cards
@@ -788,7 +790,7 @@
                 <div style="font-size:12px;color:#888">${m.name}</div>
                 <div style="display:flex;justify-content:space-between;margin-top:6px">
                     <div>
-                        <div style="font-size:11px;color:#999">${targetDate.slice(5)}</div>
+                        <div style="font-size:11px;color:#999">${targetStart.slice(5)}~${targetEnd.slice(5)}${targetDaysInfo}</div>
                         <div style="font-size:20px;font-weight:700;color:#1e3c72">${fmt(m.val1)}</div>
                     </div>
                     <div style="text-align:right">
@@ -802,7 +804,7 @@
             </div>`;
         }).join('');
 
-        document.getElementById('compareTitle').textContent = `数据对比：${targetDate.slice(5)} vs ${compareLabel.slice(5)}${daysInfo}`;
+        document.getElementById('compareTitle').textContent = `数据对比：${targetStart.slice(5)}~${targetEnd.slice(5)}${targetDaysInfo} vs ${compareLabel.slice(5)}${daysInfo}`;
 
         // Render bar chart - side by side comparison
         const compColors = getColors();
@@ -812,11 +814,11 @@
                 axisPointer: { type: 'shadow' },
                 formatter: params => params.map(p => p.marker + p.seriesName + ': ' + (params[0].dataIndex < 2 ? '¥' + Math.round(p.value).toLocaleString() : p.value.toLocaleString())).join('<br>')
             },
-            legend: { data: [targetDate.slice(5), compareLabel.slice(5) + (isRangeCompare ? ' (区间)' : '')], top: 0 },
+            legend: { data: [targetStart.slice(5) + '~' + targetEnd.slice(5) + (isRangeCompare ? '' : ' (' + (target.days||0) + '天)'), compareLabel.slice(5) + (isRangeCompare ? ' (' + (compare.days||0) + '天)' : '')], top: 0 },
             xAxis: { type: 'category', data: ['营业额(万元)', '营业收入(万元)', '订单量(百)', '营业额单均(元)', '营业收入单均(元)'] },
             yAxis: { type: 'value' },
             series: [
-                {name: targetDate.slice(5), type: 'bar', data: [+(target.revenue / 10000).toFixed(1), +(target.income / 10000).toFixed(1), +(target.orders / 100).toFixed(0), +revAvgTarget.toFixed(1), +incAvgTarget.toFixed(1)], itemStyle: { color: compColors.revenue, borderRadius: [4, 4, 0, 0] }, barWidth: '35%'},
+                {name: targetStart.slice(5) + '~' + targetEnd.slice(5), type: 'bar', data: [+(target.revenue / 10000).toFixed(1), +(target.income / 10000).toFixed(1), +(target.orders / 100).toFixed(0), +revAvgTarget.toFixed(1), +incAvgTarget.toFixed(1)], itemStyle: { color: compColors.revenue, borderRadius: [4, 4, 0, 0] }, barWidth: '35%'},
                 { name: compareLabel.slice(5) + (isRangeCompare ? ' (区间)' : ''), type: 'bar', data: [+(compare.revenue / 10000).toFixed(1), +(compare.income / 10000).toFixed(1), +(compare.orders / 100).toFixed(0), +revAvgCompare.toFixed(1), +incAvgCompare.toFixed(1)], itemStyle: { color: '#94a3b8', borderRadius: [4, 4, 0, 0] }, barWidth: '35%' }
             ],
             grid: { left: 60, right: 20, top: 40, bottom: 30 }
