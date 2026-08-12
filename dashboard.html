@@ -654,13 +654,34 @@
         });
     }
 
-    function renderComparison(targetDate, singleCompare, compareStart, compareEnd, compareMode, aggregated) {
-        // Find data for target date
-        const findItem = (dateStr) => {
-            if (aggregated[0] && aggregated[0].date) {
-                return aggregated.find(d => d.date === dateStr);
+    function getFilteredRawData() {
+        // Returns filtered RAW_DATA respecting all current filters
+        return getFilteredData();
+    }
+
+    function aggregateByDateOrNull(data) {
+        // Aggregate data by date, returns array or null
+        if (!data || !data.length) return null;
+        const map = {};
+        data.forEach(d => {
+            if (!map[d.date]) {
+                map[d.date] = { date: d.date, revenue: 0, income: 0, discount: 0, orders: 0, diners: 0 };
             }
-            const dayData = RAW_DATA.filter(d => d.date === dateStr);
+            map[d.date].revenue += d.revenue;
+            map[d.date].income += d.income;
+            map[d.date].discount += d.discount;
+            map[d.date].orders += d.orders;
+            map[d.date].diners += d.diners;
+        });
+        return Object.values(map).sort((a, b) => a.date.localeCompare(b.date));
+    }
+
+    function renderComparison(targetDate, singleCompare, compareStart, compareEnd, compareMode, aggregated) {
+        // Uses filtered data to respect store/channel filters
+        const filteredData = getFilteredRawData();
+
+        const findItemFromFiltered = (dateStr) => {
+            const dayData = filteredData.filter(d => d.date === dateStr);
             if (!dayData.length) return null;
             return {
                 revenue: dayData.reduce((s, d) => s + d.revenue, 0),
@@ -671,9 +692,8 @@
             };
         };
 
-        // Aggregate data for a date range
-        const findRangeItem = (startStr, endStr) => {
-            const rangeData = RAW_DATA.filter(d => d.date >= startStr && d.date <= endStr);
+        const findRangeFromFiltered = (startStr, endStr) => {
+            const rangeData = filteredData.filter(d => d.date >= startStr && d.date <= endStr);
             if (!rangeData.length) return null;
             return {
                 revenue: rangeData.reduce((s, d) => s + d.revenue, 0),
@@ -690,15 +710,15 @@
         }
         setTimeout(() => charts.compare.resize(), 50);
 
-        const target = findItem(targetDate);
+        const target = findItemFromFiltered(targetDate);
         let compare, compareLabel, isRangeCompare;
 
         if (compareMode === 'range' && compareStart && compareEnd) {
-            compare = findRangeItem(compareStart, compareEnd);
+            compare = findRangeFromFiltered(compareStart, compareEnd);
             compareLabel = compareStart.slice(5) + '~' + compareEnd.slice(5);
             isRangeCompare = true;
         } else {
-            compare = findItem(singleCompare);
+            compare = findItemFromFiltered(singleCompare);
             compareLabel = singleCompare;
             isRangeCompare = false;
         }
@@ -709,8 +729,7 @@
             return;
         }
 
-        // Add days info for range
-        const daysInfo = isRangeCompare && compare.days ? ` (${compare.days}天均值)` : '';
+        const daysInfo = isRangeCompare && compare.days ? ` (${compare.days}天)` : '';
 
         // Render comparison cards
         const revAvgTarget = target.orders > 0 ? target.revenue / target.orders : 0;
