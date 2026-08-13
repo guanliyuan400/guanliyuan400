@@ -530,7 +530,7 @@
             xAxis: { data: labels },
             series: [
                 { data: data.map(d => d.income) },
-                { data: data.map(d => d.discount) }
+                { data: data.map(d => d.discount), label: { show: true, position: 'top', formatter: function(params) { const rev = data[params.dataIndex] ? data[params.dataIndex].revenue : 0; return rev > 0 ? (params.value / rev * 100).toFixed(1) + '%' : ''; }, fontSize: 10, color: '#f97316', fontWeight: 'bold' } }
             ]
         });
 
@@ -566,6 +566,7 @@
     function initCharts() {
         const groupBy = document.getElementById('groupFilter').value;
         const initialData = aggregateByDate(RAW_DATA);
+        const revenueArr = initialData.map(d => d.revenue);
 
         // Revenue Chart
         const colors = getColors();
@@ -588,7 +589,7 @@
             yAxis: { type: 'value', axisLabel: { formatter: v => (v/10000).toFixed(0) + '万' } },
             series: [
                 { name: '营业收入', type: 'bar', stack: 'total', data: initialData.map(d => d.income), itemStyle: { color: colors.income }, barWidth: '50%' },
-                { name: '优惠金额', type: 'bar', stack: 'total', data: initialData.map(d => d.discount), itemStyle: { color: colors.discount }, barWidth: '50%' }
+                { name: '优惠金额', type: 'bar', stack: 'total', data: initialData.map(d => d.discount), itemStyle: { color: colors.discount }, barWidth: '50%', label: { show: true, position: 'top', formatter: function(params) { const rev = revenueArr[params.dataIndex]; return rev > 0 ? (params.value / rev * 100).toFixed(1) + '%' : ''; }, fontSize: 10, color: '#f97316', fontWeight: 'bold' } }
             ],
             grid: { left: 60, right: 20, top: 40, bottom: 30 }
         });
