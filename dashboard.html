@@ -24,8 +24,10 @@
         .filter-group input[type="date"] { padding: 7px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; min-width: 130px; cursor: pointer; background: #fafafa; font-family: inherit; }
         .filter-group input[type="date"]:focus { outline: none; border-color: #2a5298; background: white; }
         .filter-separator { color: #999; font-size: 13px; }
-        .date-preset { padding: 7px 14px; border: 1px solid #ddd; border-radius: 6px; font-size: 12px; cursor: pointer; background: #fafafa; color: #555; transition: all 0.2s; }
-        .date-preset:hover { background: #2a5298; color: white; border-color: #2a5298; }
+.date-preset { padding: 7px 14px; border: 1px solid #ddd; border-radius: 6px; font-size: 12px; cursor: pointer; background: #fafafa; color: #555; transition: all 0.2s; }
+.date-preset:hover { background: #2a5298; color: white; border-color: #2a5298; }
+.btn-query { padding: 7px 24px; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; background: #2a5298; color: white; transition: all 0.2s; margin-left: 8px; }
+.btn-query:hover { background: #1e3c72; transform: translateY(-1px); box-shadow: 0 2px 8px rgba(42,82,152,0.4); }
         
         .kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 20px; }
         .kpi-card { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; }
@@ -127,6 +129,9 @@
             <div class="filter-group">
                 <label>对比：</label>
                 <button class="date-preset" id="btnCompare" onclick="toggleCompare()">+ 添加对比</button>
+            </div>
+            <div class="filter-group">
+                <button class="btn-query" onclick="updateDashboard()">查询</button>
             </div>
             <div class="filter-group" id="compareOpts" style="display:none;align-items:center;gap:8px">
                 <select id="compareMode" onchange="updateCompareDate()">
